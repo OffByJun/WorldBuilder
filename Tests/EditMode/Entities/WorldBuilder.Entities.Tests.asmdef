@@ -1,0 +1,28 @@
+{
+    "name": "WorldBuilder.Entities.Tests",
+    "rootNamespace": "WorldBuilder.Entities.Tests",
+    "references": [
+        "WorldBuilder.Runtime",
+        "WorldBuilder.Entities",
+        "Unity.Collections",
+        "Unity.Core",
+        "Unity.Entities",
+        "Unity.Mathematics",
+        "Unity.Physics",
+        "Unity.Transforms"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}

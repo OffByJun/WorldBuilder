@@ -1,0 +1,23 @@
+{
+    "name": "WorldBuilder.Entities",
+    "rootNamespace": "WorldBuilder.Entities",
+    "references": [
+        "WorldBuilder.Runtime",
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.Entities",
+        "Unity.Entities.Graphics",
+        "Unity.Mathematics",
+        "Unity.Physics",
+        "Unity.Transforms"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

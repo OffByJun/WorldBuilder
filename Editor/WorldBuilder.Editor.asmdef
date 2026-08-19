@@ -1,0 +1,23 @@
+{
+    "name": "WorldBuilder.Editor",
+    "rootNamespace": "WorldBuilder.Editor",
+    "references": [
+        "WorldBuilder.Runtime",
+        "WorldBuilder.Authoring",
+        "WorldBuilder.Baking",
+        "WorldBuilder.Entities",
+        "WorldBuilder.Entities.Authoring",
+        "Unity.Mathematics"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

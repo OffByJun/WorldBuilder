@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="True">
+    <Style src="ToolListItem.uss" />
+    <ui:Button name="tool-button" class="tool-button">
+        <ui:Image name="tool-icon" class="tool-icon" />
+        <ui:Label name="tool-name" class="tool-name" />
+    </ui:Button>
+</ui:UXML>

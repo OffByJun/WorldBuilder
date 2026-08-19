@@ -1,0 +1,24 @@
+{
+    "name": "WorldBuilder.EditModeTests",
+    "rootNamespace": "WorldBuilder.Tests",
+    "references": [
+        "WorldBuilder.Runtime",
+        "WorldBuilder.Authoring",
+        "WorldBuilder.Baking",
+        "WorldBuilder.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}

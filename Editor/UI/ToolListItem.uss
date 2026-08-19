@@ -1,0 +1,15 @@
+.tool-button {
+    flex-direction: row;
+    align-items: center;
+}
+
+.tool-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 8px;
+}
+
+.tool-name {
+    color: #D4D4D4;
+    font-size: 12px;
+}

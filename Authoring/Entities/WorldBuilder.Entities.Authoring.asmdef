@@ -1,0 +1,23 @@
+{
+    "name": "WorldBuilder.Entities.Authoring",
+    "rootNamespace": "WorldBuilder.Entities.Authoring",
+    "references": [
+        "WorldBuilder.Runtime",
+        "WorldBuilder.Entities",
+        "Unity.Collections",
+        "Unity.Entities",
+        "Unity.Entities.Graphics",
+        "Unity.Entities.Hybrid",
+        "Unity.Mathematics",
+        "Unity.Transforms"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

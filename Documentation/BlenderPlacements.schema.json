@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://emiteat.com/worldbuilder/chunk-placements-v1.schema.json",
+  "title": "WorldBuilder Chunk Placements v1",
+  "type": "object",
+  "required": ["version", "worldId", "chunk", "objects"],
+  "properties": {
+    "version": { "const": 1 },
+    "worldId": { "type": "string" },
+    "chunk": {
+      "type": "object",
+      "required": ["x", "z"],
+      "properties": { "x": { "type": "integer" }, "z": { "type": "integer" } },
+      "additionalProperties": false
+    },
+    "objects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["stableId", "name", "role", "assetId", "layer", "matrix", "properties"],
+        "properties": {
+          "stableId": { "type": "string", "minLength": 1 },
+          "name": { "type": "string" },
+          "role": { "enum": ["INSTANCE", "MARKER", "ENTITY"] },
+          "assetId": { "type": "string" },
+          "layer": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Authoring-only vertical band. Chunk ownership and runtime streaming stay 2D."
+          },
+          "matrix": { "type": "array", "minItems": 16, "maxItems": 16, "items": { "type": "number" } },
+          "properties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["key", "value"],
+              "properties": { "key": { "type": "string" }, "value": { "type": "string" } },
+              "additionalProperties": false
+            }
+          },
+          "entity": {
+            "type": "object",
+            "required": ["prefabId", "kind", "flags", "lifetimeSeconds"],
+            "properties": {
+              "prefabId": { "type": "integer", "minimum": 0 },
+              "kind": { "enum": ["Generic", "Creature", "Resource", "DroppedItem", "Projectile", "Effect"] },
+              "flags": {
+                "type": "array",
+                "items": { "enum": ["Persistent", "RegionStreamed", "Replicated"] },
+                "uniqueItems": true
+              },
+              "lifetimeSeconds": { "type": "number", "minimum": 0 }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": { "properties": { "role": { "const": "ENTITY" } }, "required": ["role"] },
+            "then": { "required": ["entity"] }
+          }
+        ]
+      }
+    }
+  },
+  "additionalProperties": false
+}
