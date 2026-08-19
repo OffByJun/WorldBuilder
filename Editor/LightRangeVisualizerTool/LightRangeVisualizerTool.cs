@@ -18,9 +18,9 @@ namespace WorldBuilder.Editor.LightRangeVisualizerTool
 
         public Texture2D ToolIcon => null;
 
-        public void OnEnable()
-        {
-        }
+        private readonly SceneComponentCache<Light> cache = new SceneComponentCache<Light>();
+
+        public void OnEnable() => cache.Hook();
 
         public VisualElement CreateInspectorGUI()
         {
@@ -64,14 +64,15 @@ namespace WorldBuilder.Editor.LightRangeVisualizerTool
 
         public void OnSceneGUI()
         {
-            if (!showAll)
+            if (!showAll || !WorldBuilderSceneGUI.IsRepaint)
             {
                 return;
             }
 
-            Light[] lights = Object.FindObjectsByType<Light>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            Light[] lights = cache.Items;
             for (int i = 0; i < lights.Length; i++)
             {
+                if (lights[i] == null) continue;
                 Draw(lights[i]);
             }
         }

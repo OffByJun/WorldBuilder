@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "worldId": "SurvivalWorld",
+  "chunkSize": 128.0,
+  "chunksPerRegion": 4,
+  "queryCellSize": 32.0,
+  "worldOrigin": {
+    "x": 0.0,
+    "z": 0.0
+  },
+  "coordinateSystem": {
+    "blenderPlane": "XY",
+    "unityPlane": "XZ",
+    "vectorMapping": "XZY"
+  }
+}

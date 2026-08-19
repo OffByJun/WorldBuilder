@@ -1,5 +1,7 @@
 # WorldBuilder
 
+월드 Grid, Blender chunk 교환, Region streaming 및 데이터 기반 Water 시스템은 [Documentation/KR/WorldGridWater.md](Documentation/KR/WorldGridWater.md)와 [Documentation/KR/ChunkBlenderPipeline.md](Documentation/KR/ChunkBlenderPipeline.md)를 참고하세요. Blender 애드온은 [BlenderAddon/README.md](BlenderAddon/README.md)에 설치 및 export 계약이 정리되어 있습니다.
+
 ## KR
 
 > 대규모 월드 제작을 위한 Unity Editor Framework

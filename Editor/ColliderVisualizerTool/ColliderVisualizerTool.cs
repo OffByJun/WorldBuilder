@@ -19,9 +19,9 @@ namespace WorldBuilder.Editor.ColliderVisualizerTool
 
         public Texture2D ToolIcon => null;
 
-        public void OnEnable()
-        {
-        }
+        private readonly SceneComponentCache<Collider> cache = new SceneComponentCache<Collider>();
+
+        public void OnEnable() => cache.Hook();
 
         public VisualElement CreateInspectorGUI()
         {
@@ -66,14 +66,15 @@ namespace WorldBuilder.Editor.ColliderVisualizerTool
 
         public void OnSceneGUI()
         {
-            if (!showAll)
+            if (!showAll || !WorldBuilderSceneGUI.IsRepaint)
             {
                 return;
             }
 
-            Collider[] colliders = Object.FindObjectsByType<Collider>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            Collider[] colliders = cache.Items;
             for (int i = 0; i < colliders.Length; i++)
             {
+                if (colliders[i] == null) continue;
                 Draw(colliders[i]);
             }
         }

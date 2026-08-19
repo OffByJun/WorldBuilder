@@ -110,6 +110,8 @@ namespace WorldBuilder.Editor.ObjectOwnerTool
 
         public void OnSceneGUI()
         {
+            if (!WorldBuilderSceneGUI.IsRepaint) return;
+
             for (int i = 0; i < tags.Count; i++)
             {
                 if (tags[i] == null)

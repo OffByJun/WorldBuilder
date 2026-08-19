@@ -152,6 +152,8 @@ namespace WorldBuilder.Editor.SceneSearchTool
 
         public void OnSceneGUI()
         {
+            if (!WorldBuilderSceneGUI.IsRepaint) return;
+
             Handles.color = Color.cyan;
 
             for (int i = 0; i < results.Count; i++)

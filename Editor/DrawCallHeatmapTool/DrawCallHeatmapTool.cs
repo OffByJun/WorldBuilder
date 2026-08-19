@@ -85,8 +85,12 @@ namespace WorldBuilder.Editor.DrawCallHeatmapTool
             SceneView.RepaintAll();
         }
 
+        private readonly Vector3[] corners = new Vector3[4];
+
         public void OnSceneGUI()
         {
+            if (!WorldBuilderSceneGUI.IsRepaint) return;
+
             for (int i = 0; i < renderers.Count; i++)
             {
                 if (renderers[i] == null)
@@ -98,13 +102,10 @@ namespace WorldBuilder.Editor.DrawCallHeatmapTool
                 Color color = ColorFor(drawCalls);
 
                 Bounds bounds = renderers[i].bounds;
-                Vector3[] corners =
-                {
-                    new Vector3(bounds.min.x, bounds.min.y, bounds.center.z),
-                    new Vector3(bounds.min.x, bounds.max.y, bounds.center.z),
-                    new Vector3(bounds.max.x, bounds.max.y, bounds.center.z),
-                    new Vector3(bounds.max.x, bounds.min.y, bounds.center.z)
-                };
+                corners[0] = new Vector3(bounds.min.x, bounds.min.y, bounds.center.z);
+                corners[1] = new Vector3(bounds.min.x, bounds.max.y, bounds.center.z);
+                corners[2] = new Vector3(bounds.max.x, bounds.max.y, bounds.center.z);
+                corners[3] = new Vector3(bounds.max.x, bounds.min.y, bounds.center.z);
 
                 Color fill = new Color(color.r, color.g, color.b, 0.25f);
                 Handles.DrawSolidRectangleWithOutline(corners, fill, color);

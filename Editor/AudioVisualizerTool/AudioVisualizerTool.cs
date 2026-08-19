@@ -17,9 +17,9 @@ namespace WorldBuilder.Editor.AudioVisualizerTool
 
         public Texture2D ToolIcon => null;
 
-        public void OnEnable()
-        {
-        }
+        private readonly SceneComponentCache<AudioSource> cache = new SceneComponentCache<AudioSource>();
+
+        public void OnEnable() => cache.Hook();
 
         public VisualElement CreateInspectorGUI()
         {
@@ -64,14 +64,15 @@ namespace WorldBuilder.Editor.AudioVisualizerTool
 
         public void OnSceneGUI()
         {
-            if (!showAll)
+            if (!showAll || !WorldBuilderSceneGUI.IsRepaint)
             {
                 return;
             }
 
-            AudioSource[] sources = Object.FindObjectsByType<AudioSource>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            AudioSource[] sources = cache.Items;
             for (int i = 0; i < sources.Length; i++)
             {
+                if (sources[i] == null) continue;
                 Draw(sources[i]);
             }
         }

@@ -1,0 +1,19 @@
+{
+    "name": "WorldBuilder.Baking",
+    "rootNamespace": "WorldBuilder.Baking",
+    "references": [
+        "WorldBuilder.Runtime",
+        "WorldBuilder.Authoring"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -12,6 +12,12 @@ namespace WorldBuilder.Editor.SpawnHeatmap
         [SerializeField] private int maxDensity = 10;
 
         private readonly ISpawnerSceneQuery query;
+        private readonly List<Vector3> cachedPositions = new List<Vector3>();
+        private readonly List<Color> cachedColors = new List<Color>();
+        private double lastSolve = double.NegativeInfinity;
+        private int cachedCount = -1;
+        private float cachedRadius;
+        private int cachedMaxDensity;
 
         public SpawnHeatmapTool(ISpawnerSceneQuery query)
         {
@@ -46,19 +52,42 @@ namespace WorldBuilder.Editor.SpawnHeatmap
 
         public void OnSceneGUI()
         {
-            IReadOnlyList<ISpawner> spawners = query.GetAll();
-            float sqrRadius = heatRadius * heatRadius;
+            if (!WorldBuilderSceneGUI.IsRepaint) return;
 
+            Solve();
+            for (int i = 0; i < cachedPositions.Count; i++)
+            {
+                Handles.color = cachedColors[i];
+                Handles.DrawSolidDisc(cachedPositions[i], Vector3.up, heatRadius * 0.5f);
+            }
+        }
+
+        private void Solve()
+        {
+            IReadOnlyList<ISpawner> spawners = query.GetAll();
+            double now = EditorApplication.timeSinceStartup;
+            if (cachedCount == spawners.Count && cachedRadius == heatRadius &&
+                cachedMaxDensity == maxDensity && now - lastSolve < 1.0)
+            {
+                return;
+            }
+            cachedCount = spawners.Count;
+            cachedRadius = heatRadius;
+            cachedMaxDensity = maxDensity;
+            lastSolve = now;
+
+            cachedPositions.Clear();
+            cachedColors.Clear();
+            float sqrRadius = heatRadius * heatRadius;
             for (int i = 0; i < spawners.Count; i++)
             {
                 Vector3 position = spawners[i].SpawnPosition;
                 int neighbors = CountNeighbors(spawners, position, sqrRadius);
                 float t = Mathf.Clamp01((float)neighbors / maxDensity);
-
                 Color color = Color.Lerp(Color.blue, Color.red, t);
                 color.a = 0.35f;
-                Handles.color = color;
-                Handles.DrawSolidDisc(position, Vector3.up, heatRadius * 0.5f);
+                cachedPositions.Add(position);
+                cachedColors.Add(color);
             }
         }
 

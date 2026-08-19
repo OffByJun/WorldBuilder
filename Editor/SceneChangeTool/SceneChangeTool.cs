@@ -170,6 +170,8 @@ namespace WorldBuilder.Editor.SceneChangeTool
 
         public void OnSceneGUI()
         {
+            if (!WorldBuilderSceneGUI.IsRepaint) return;
+
             for (int i = 0; i < changes.Count; i++)
             {
                 Handles.color = ColorFor(changes[i].type);

@@ -24,6 +24,18 @@ namespace WorldBuilder.Editor.UVVisualizerTool
 
         private MeshFilter target;
 
+        private readonly List<Vector2> uvBuffer = new List<Vector2>();
+        private readonly Dictionary<long, int> edgeCounts = new Dictionary<long, int>();
+        private readonly List<Vector3> edgeBuffer = new List<Vector3>();
+        private readonly List<Vector3> seamBuffer = new List<Vector3>();
+        private Vector3[] edgeSegments = System.Array.Empty<Vector3>();
+        private Vector3[] seamSegments = System.Array.Empty<Vector3>();
+        private Mesh cachedMesh;
+        private UVChannel cachedChannel;
+        private float cachedDisplaySize;
+        private int cachedVertexCount;
+        private int cachedSubMeshCount;
+
         public string ToolName => WorldBuilderLocalization.Get("tool.uvVisualizer");
         public string Category => WorldBuilderCategory.Rendering;
 
@@ -78,61 +90,95 @@ namespace WorldBuilder.Editor.UVVisualizerTool
 
         public void OnSceneGUI()
         {
+            if (!WorldBuilderSceneGUI.IsRepaint) return;
+
             MeshFilter filter = ResolveTarget();
             if (filter == null || filter.sharedMesh == null)
             {
                 return;
             }
 
-            Mesh mesh = filter.sharedMesh;
-            List<Vector2> uv = new List<Vector2>();
-            mesh.GetUVs((int)channel, uv);
-            if (uv.Count == 0)
-            {
-                return;
-            }
+            if (!RebuildSegments(filter.sharedMesh)) return;
 
-            int[] triangles = mesh.triangles;
             Vector3 origin = filter.transform.position + Vector3.up * (filter.sharedMesh.bounds.size.y + 1f);
-            Vector3 right = Vector3.right * displaySize;
-            Vector3 up = Vector3.forward * displaySize;
-
-            Dictionary<long, int> edgeCounts = new Dictionary<long, int>();
-            for (int i = 0; i < triangles.Length; i += 3)
+            Matrix4x4 previous = Handles.matrix;
+            Handles.matrix = Matrix4x4.Translate(origin);
+            if (edgeSegments.Length > 0)
             {
-                CountEdge(edgeCounts, triangles[i], triangles[i + 1]);
-                CountEdge(edgeCounts, triangles[i + 1], triangles[i + 2]);
-                CountEdge(edgeCounts, triangles[i + 2], triangles[i]);
+                Handles.color = edgeColor;
+                Handles.DrawLines(edgeSegments);
             }
-
-            for (int i = 0; i < triangles.Length; i += 3)
+            if (seamSegments.Length > 0)
             {
-                DrawEdge(uv, edgeCounts, triangles[i], triangles[i + 1], origin, right, up);
-                DrawEdge(uv, edgeCounts, triangles[i + 1], triangles[i + 2], origin, right, up);
-                DrawEdge(uv, edgeCounts, triangles[i + 2], triangles[i], origin, right, up);
+                Handles.color = seamColor;
+                Handles.DrawLines(seamSegments);
             }
+            Handles.matrix = previous;
         }
 
-        private void CountEdge(Dictionary<long, int> edgeCounts, int a, int b)
+        private bool RebuildSegments(Mesh mesh)
+        {
+            if (cachedMesh == mesh && cachedChannel == channel && cachedDisplaySize == displaySize &&
+                cachedVertexCount == mesh.vertexCount && cachedSubMeshCount == mesh.subMeshCount)
+            {
+                return edgeSegments.Length > 0 || seamSegments.Length > 0;
+            }
+
+            uvBuffer.Clear();
+            mesh.GetUVs((int)channel, uvBuffer);
+            cachedMesh = mesh;
+            cachedChannel = channel;
+            cachedDisplaySize = displaySize;
+            cachedVertexCount = mesh.vertexCount;
+            edgeBuffer.Clear();
+            seamBuffer.Clear();
+            edgeCounts.Clear();
+
+            cachedSubMeshCount = mesh.subMeshCount;
+            int[] triangles = mesh.triangles;
+            if (uvBuffer.Count == 0)
+            {
+                edgeSegments = System.Array.Empty<Vector3>();
+                seamSegments = System.Array.Empty<Vector3>();
+                return false;
+            }
+
+            for (int i = 0; i < triangles.Length; i += 3)
+            {
+                CountEdge(triangles[i], triangles[i + 1]);
+                CountEdge(triangles[i + 1], triangles[i + 2]);
+                CountEdge(triangles[i + 2], triangles[i]);
+            }
+
+            Vector3 right = Vector3.right * displaySize;
+            Vector3 up = Vector3.forward * displaySize;
+            foreach (KeyValuePair<long, int> entry in edgeCounts)
+            {
+                int a = (int)(entry.Key >> 32);
+                int b = (int)(entry.Key & 0xFFFFFFFFL);
+                if (a >= uvBuffer.Count || b >= uvBuffer.Count) continue;
+                List<Vector3> target = entry.Value <= 1 ? seamBuffer : edgeBuffer;
+                target.Add(right * uvBuffer[a].x + up * uvBuffer[a].y);
+                target.Add(right * uvBuffer[b].x + up * uvBuffer[b].y);
+            }
+
+            edgeSegments = ToArray(edgeSegments, edgeBuffer);
+            seamSegments = ToArray(seamSegments, seamBuffer);
+            return edgeSegments.Length > 0 || seamSegments.Length > 0;
+        }
+
+        private static Vector3[] ToArray(Vector3[] target, List<Vector3> source)
+        {
+            if (target.Length != source.Count) target = new Vector3[source.Count];
+            source.CopyTo(target);
+            return target;
+        }
+
+        private void CountEdge(int a, int b)
         {
             long key = EdgeKey(a, b);
             edgeCounts.TryGetValue(key, out int count);
             edgeCounts[key] = count + 1;
-        }
-
-        private void DrawEdge(List<Vector2> uv, Dictionary<long, int> edgeCounts, int a, int b, Vector3 origin, Vector3 right, Vector3 up)
-        {
-            if (a >= uv.Count || b >= uv.Count)
-            {
-                return;
-            }
-
-            Vector3 pa = origin + right * uv[a].x + up * uv[a].y;
-            Vector3 pb = origin + right * uv[b].x + up * uv[b].y;
-
-            edgeCounts.TryGetValue(EdgeKey(a, b), out int count);
-            Handles.color = count <= 1 ? seamColor : edgeColor;
-            Handles.DrawLine(pa, pb);
         }
 
         private long EdgeKey(int a, int b)

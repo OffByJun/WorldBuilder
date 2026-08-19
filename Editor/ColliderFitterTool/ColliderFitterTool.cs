@@ -80,6 +80,8 @@ namespace WorldBuilder.Editor.ColliderFitterTool
 
         public void OnSceneGUI()
         {
+            if (!WorldBuilderSceneGUI.IsRepaint) return;
+
             GameObject resolved = ResolveTarget();
             if (resolved == null || !ColliderFitterService.TryGetBounds(resolved, out Bounds bounds))
             {

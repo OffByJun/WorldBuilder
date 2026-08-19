@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://emiteat.com/worldbuilder/chunk-manifest-v2.schema.json",
+  "title": "WorldBuilder Blender Chunk Manifest v2",
+  "type": "object",
+  "required": ["version", "worldId", "chunk", "region", "chunkSize", "localOrigin", "coordinateSystem", "source", "contentHash", "content"],
+  "properties": {
+    "version": { "const": 2 },
+    "worldId": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
+    "chunk": { "$ref": "#/$defs/coord" },
+    "region": { "$ref": "#/$defs/coord" },
+    "chunkSize": { "type": "number", "exclusiveMinimum": 0 },
+    "localOrigin": { "$ref": "#/$defs/zeroVector" },
+    "coordinateSystem": {
+      "type": "object",
+      "required": ["unit", "unitsPerMeter", "blenderUpAxis", "blenderForwardAxis", "unityUpAxis", "unityForwardAxis", "vectorMapping"],
+      "properties": {
+        "unit": { "const": "meter" },
+        "unitsPerMeter": { "const": 1 },
+        "blenderUpAxis": { "const": "Z" },
+        "blenderForwardAxis": { "const": "Y" },
+        "unityUpAxis": { "const": "Y" },
+        "unityForwardAxis": { "const": "Z" },
+        "vectorMapping": { "const": "XZY" }
+      },
+      "additionalProperties": false
+    },
+    "exporter": {
+      "type": "object",
+      "properties": { "name": { "type": "string" }, "version": { "type": "string" } },
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "object",
+      "required": ["authoringHash"],
+      "properties": {
+        "blendFile": { "type": "string" },
+        "collection": { "type": "string" },
+        "authoringHash": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "contentHash": { "$ref": "#/$defs/sha256" },
+    "content": {
+      "type": "object",
+      "required": ["geometry", "collision", "placements", "geometryObjectCount", "collisionObjectCount", "placementCount", "localBounds"],
+      "properties": {
+        "geometry": { "$ref": "#/$defs/file" },
+        "collision": { "$ref": "#/$defs/file" },
+        "placements": { "$ref": "#/$defs/file" },
+        "geometryObjectCount": { "type": "integer", "minimum": 0 },
+        "collisionObjectCount": { "type": "integer", "minimum": 0 },
+        "placementCount": { "type": "integer", "minimum": 0 },
+        "localBounds": {
+          "type": "object",
+          "required": ["min", "max"],
+          "properties": { "min": { "$ref": "#/$defs/vector" }, "max": { "$ref": "#/$defs/vector" } },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "coord": {
+      "type": "object",
+      "required": ["x", "z"],
+      "properties": { "x": { "type": "integer" }, "z": { "type": "integer" } },
+      "additionalProperties": false
+    },
+    "vector": {
+      "type": "object",
+      "required": ["x", "y", "z"],
+      "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "z": { "type": "number" } },
+      "additionalProperties": false
+    },
+    "zeroVector": {
+      "type": "object",
+      "required": ["x", "y", "z"],
+      "properties": { "x": { "const": 0 }, "y": { "const": 0 }, "z": { "const": 0 } },
+      "additionalProperties": false
+    },
+    "sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+    "file": {
+      "type": "object",
+      "required": ["path", "sha256", "bytes"],
+      "properties": {
+        "path": { "type": "string" },
+        "sha256": { "type": "string" },
+        "bytes": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

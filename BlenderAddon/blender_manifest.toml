@@ -1,0 +1,10 @@
+schema_version = "1.0.0"
+id = "worldbuilder_toolkit"
+version = "1.9.0"
+name = "WorldBuilder Toolkit"
+tagline = "Chunked world, biome, scatter, spline, bake, Unity export"
+maintainer = "Hyojun Kim / Nex EngineWorks"
+type = "add-on"
+blender_version_min = "4.3.0"
+license = ["SPDX:MIT"]
+tags = ["Modeling", "Mesh", "Import-Export"]

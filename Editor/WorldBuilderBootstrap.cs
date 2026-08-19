@@ -43,6 +43,7 @@ namespace WorldBuilder.Editor
 
             WorldBuilderToolRegistry.Register(new VoxelPaintTool(voxelStore));
             WorldBuilderToolRegistry.Register(new ChunkGridVisualizerTool(biomeMap));
+            WorldBuilderToolRegistry.Register(new EntityCatalogTool.EntityCatalogTool());
             WorldBuilderToolRegistry.Register(new HeightBiomeMapperTool(biomeMap));
             WorldBuilderToolRegistry.Register(new WorldBuilder.Editor.PathTool.PathTool());
             WorldBuilderToolRegistry.Register(new BinImporterTool(biomeMap, voxelStore));

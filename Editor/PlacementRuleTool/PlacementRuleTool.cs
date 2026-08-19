@@ -205,6 +205,8 @@ namespace WorldBuilder.Editor.PlacementRuleTool
 
         public void OnSceneGUI()
         {
+            if (!WorldBuilderSceneGUI.IsRepaint) return;
+
             Handles.color = Color.red;
 
             for (int i = 0; i < violations.Count; i++)

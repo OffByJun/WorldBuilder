@@ -54,6 +54,8 @@ namespace WorldBuilder.Editor.EnvironmentOverlayTool
 
         public void OnSceneGUI()
         {
+            if (!WorldBuilderSceneGUI.IsRepaint) return;
+
             if (providers == null)
             {
                 return;
@@ -78,8 +80,6 @@ namespace WorldBuilder.Editor.EnvironmentOverlayTool
                     Handles.DrawSolidDisc(positions[i], Vector3.up, discSize);
                 }
             }
-
-            SceneView.RepaintAll();
         }
 
         private Color LowColor()

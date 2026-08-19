@@ -3,6 +3,10 @@
     "rootNamespace": "WorldBuilder.Editor",
     "references": [
         "WorldBuilder.Runtime",
+        "WorldBuilder.Authoring",
+        "WorldBuilder.Baking",
+        "WorldBuilder.Entities",
+        "WorldBuilder.Entities.Authoring",
         "Unity.Mathematics"
     ],
     "includePlatforms": [

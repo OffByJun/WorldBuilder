@@ -60,6 +60,8 @@ namespace WorldBuilder.Editor.DepthLayerVisualizer
 
         public void OnSceneGUI()
         {
+            if (!WorldBuilderSceneGUI.IsRepaint) return;
+
             SceneView view = SceneView.lastActiveSceneView;
             if (view == null)
             {
