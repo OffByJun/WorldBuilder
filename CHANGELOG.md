@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.9.1 — Cave Authoring Bridge
+
+### Blender 애드온
+
+* **Cave Network Builder** (`cave_generator.py`) — Unity `CaveField`의 프리셋(Limestone/LavaTubes/
+  FloodedGrotto/AbyssalNetwork)과 대응하는 절차적 동굴 터널 생성기. 병렬 운반(parallel transport)
+  프레임 기반 폐쇄 튜브 메시 + 케버른 룸 불룸 + 수직 스쿼시
+* 생성된 정점에 `WB_BIOME_CAVE` 가중치 속성 자동 부여 — 청크 익스포트 시 Unity에서 Cave 바이옴으로 분류
+* WorldBuilder 사이드바에 KO/EN 패널 추가, 시드 결정론 보장(동일 시드 → 동일 지오메트리)
+* 스모크 테스트 `blender_cave_generator_smoke.py` 추가(4프리셋 생성·결정론·속성·경계 검증)
+
+### Unity 런타임/툴
+
+* `TerrainDeformer.Drill` — 두 점 사이를 구형 커터로 스윕하는 터널 굴착 API(저널/이벤트 연동,
+  간격 없는 스윕을 위해 반경 적응 스텝). 플레이어 채굴·웜 AI 굴로에 사용
+* `CaveAmbientTint` — 버텍스 단위 동굴 암부 셰이딩. Terrain Forge에 "Darken Cave Vertices"
+  토글 추가(병렬 베이크 패스 안전, 스레드별 샘플러)
+* `EnvironmentClassifier.ClassifyBatch` — 다수 위치 일괄 환경 판정(스폰 시스템용)
+
+### 테스트
+
+* 드릴 연속 터널·원거리 보존, 앰비언트 틴트(커버만 암화·심도 그라데이션), 배치 분류 일치 테스트 추가
+
 ## 0.9.0 — Underwater & Caves
 
 ### 절차적 동굴 생성 엔진

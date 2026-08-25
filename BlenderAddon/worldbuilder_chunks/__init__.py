@@ -30,6 +30,7 @@ from . import (
     bookmarks,
     biome_painter,
     biome_ui,
+    cave_generator,
     chunk_terrain,
     contract,
     entity_catalog,
@@ -51,7 +52,7 @@ from . import (
     water,
 )
 
-_feature_modules = (entity_catalog, layers, water, bookmarks, traversal, biome_painter, chunk_terrain, sculpt_session, asset_library, reef_generator, scatter, spline_authoring, seam_ui, bake, finishing_tools)
+_feature_modules = (entity_catalog, layers, water, bookmarks, traversal, biome_painter, chunk_terrain, cave_generator, sculpt_session, asset_library, reef_generator, scatter, spline_authoring, seam_ui, bake, finishing_tools)
 
 
 def _settings(context):

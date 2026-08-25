@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
 using UnityEditor.UIElements;
@@ -11,6 +12,7 @@ using WorldBuilder.Editor.LODGeneratorTool;
 using WorldBuilder.Editor.PrefabBrush;
 using WorldBuilder.Editor.ScatterBakeTool;
 using WorldBuilder.Runtime.Data;
+using WorldBuilder.Runtime.Environment;
 using WorldBuilder.Runtime.Terrain;
 using Debug = UnityEngine.Debug;
 
@@ -42,6 +44,7 @@ namespace WorldBuilder.Editor.TerrainForgeTool
         [SerializeField] private bool showCrossSection = true;
         [SerializeField] private CaveShapeParams caveParams;
         [SerializeField] private bool carveCavesDuringGenerate = true;
+        [SerializeField] private bool darkenCaveVertices = true;
 
         // v0.8.0 — splatmaps, LOD chains, erosion maps.
         [SerializeField] private Texture2D splat0;
@@ -144,6 +147,11 @@ namespace WorldBuilder.Editor.TerrainForgeTool
             vertexColors.tooltip = "Requires a High-Res Biome Map. Paints per-vertex biome colors.";
             vertexColors.RegisterValueChangedCallback(evt => paintVertexBiomes = evt.newValue);
             meshFoldout.Add(vertexColors);
+
+            Toggle caveTint = new Toggle("Darken Cave Vertices") { value = darkenCaveVertices };
+            caveTint.tooltip = "Lerps vertices with rock cover overhead toward a cool shadow tone, so carved caves read dark without extra lighting.";
+            caveTint.RegisterValueChangedCallback(evt => darkenCaveVertices = evt.newValue);
+            meshFoldout.Add(caveTint);
 
             Toggle assemble = new Toggle("Assemble Scene Objects") { value = assembleSceneObjects };
             assemble.tooltip = "Creates TerrainRoot hierarchy with renderers, colliders and runtime deformer hooks.";
@@ -482,10 +490,19 @@ namespace WorldBuilder.Editor.TerrainForgeTool
                 if (anyLayer) coords.Add(new Vector3Int(cx, 0, cz));
             }
 
-            Func<Vector3, Color> colorSampler =
+            Func<Vector3, Color> baseColorSampler =
                 paintVertexBiomes && biomeMap != null
                     ? (Func<Vector3, Color>)(v => biomeMap.SampleColor(v.x, v.z, chunkSize))
                     : null;
+
+            Func<Vector3, Color> colorSampler = baseColorSampler;
+            if (baseColorSampler != null && darkenCaveVertices)
+            {
+                // Per-thread sampler: the shade march runs inside the Parallel.For pass.
+                var threadShadeSamplers =
+                    new ThreadLocal<VoxelWorldSampler>(() => new VoxelWorldSampler(storeAsset, chunkSize));
+                colorSampler = v => CaveAmbientTint.Shade(threadShadeSamplers.Value, v, baseColorSampler(v));
+            }
 
             var watch = Stopwatch.StartNew();
 

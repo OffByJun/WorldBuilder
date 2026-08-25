@@ -63,9 +63,57 @@ namespace WorldBuilder.Runtime.Terrain
             if (store == null) throw new ArgumentNullException(nameof(store));
             if (radius <= 0f) return 0;
 
+            var touched = new HashSet<Vector3Int>();
+            int changed = ApplySphere(store, chunkSize, center, radius, delta, touched);
+
+            foreach (Vector3Int coord in touched)
+            {
+                editedChunks.Add(coord);
+                ChunkDeformed?.Invoke(coord);
+            }
+            return changed;
+        }
+
+        /// <summary>
+        /// Sweeps a spherical cutter along the <paramref name="from"/> → <paramref name="to"/>
+        /// segment — carves straight tunnels between two points (e.g. player mining, worm
+        /// AI burrows). Sampling spacing adapts to the cutter radius so the swept volume is
+        /// gap-free. Returns the number of voxels changed across all touched chunks.
+        /// </summary>
+        public static int Drill(VoxelStoreAsset store, float chunkSize, Vector3 from, Vector3 to,
+            float radius, float delta, float stepOverride = 0f)
+        {
+            if (store == null) throw new ArgumentNullException(nameof(store));
+            if (radius <= 0f) return 0;
+
+            Vector3 span = to - from;
+            float length = span.magnitude;
+            if (length < 1e-5f) return Modify(store, chunkSize, from, radius, delta);
+
+            float step = stepOverride > 0f ? stepOverride : Mathf.Max(radius * 0.35f, chunkSize / store.Resolution);
+            int samples = Mathf.CeilToInt(length / step);
+
+            var touched = new HashSet<Vector3Int>();
+            int changed = 0;
+            for (int i = 0; i <= samples; i++)
+            {
+                Vector3 center = from + span * ((float)i / samples);
+                changed += ApplySphere(store, chunkSize, center, radius, delta, touched);
+            }
+
+            foreach (Vector3Int coord in touched)
+            {
+                editedChunks.Add(coord);
+                ChunkDeformed?.Invoke(coord);
+            }
+            return changed;
+        }
+
+        private static int ApplySphere(VoxelStoreAsset store, float chunkSize, Vector3 center,
+            float radius, float delta, HashSet<Vector3Int> touched)
+        {
             int resolution = store.Resolution;
             float spacing = chunkSize / resolution;
-            var touched = new HashSet<Vector3Int>();
             int changed = 0;
 
             int minX = Mathf.FloorToInt((center.x - radius) / chunkSize);
@@ -101,12 +149,6 @@ namespace WorldBuilder.Runtime.Terrain
                     touched.Add(entry.coord);
                     changed++;
                 }
-            }
-
-            foreach (Vector3Int coord in touched)
-            {
-                editedChunks.Add(coord);
-                ChunkDeformed?.Invoke(coord);
             }
             return changed;
         }

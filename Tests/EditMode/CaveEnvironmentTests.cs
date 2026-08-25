@@ -147,9 +147,100 @@ namespace WorldBuilder.Tests
             return float.MinValue;
         }
 
-        // ---- UndergroundProbe / EnvironmentClassifier ----
+        // ---- TerrainDeformer.Drill ----
 
-        /// <summary>Fills every chunk in [-1..1]³ solid, then hollows a box room at the centre.</summary>
+        [Test]
+        public void Drill_CarvesContinuousTunnelAlongSegment()
+        {
+            const int resolution = 16;
+            const float chunkSize = 16f;
+            var store = ScriptableObject.CreateInstance<VoxelStoreAsset>();
+
+            for (int cy = -1; cy <= 0; cy++)
+            for (int cz = -1; cz <= 1; cz++)
+            for (int cx = -1; cx <= 1; cx++)
+            {
+                VoxelChunkEntry entry = store.GetOrCreate(new Vector3Int(cx, cy, cz));
+                for (int i = 0; i < entry.density.Length; i++) entry.density[i] = 1f;
+            }
+
+            TerrainDeformer.ResetJournal();
+            var sampler = new VoxelWorldSampler(store, chunkSize);
+
+            int changed = TerrainDeformer.Drill(store, chunkSize,
+                new Vector3(4f, 8f, 8f), new Vector3(28f, 8f, 8f),
+                radius: 2.5f, delta: -2f);
+
+            Assert.That(changed, Is.GreaterThan(0));
+            Assert.That(TerrainDeformer.EditedChunks.Count, Is.GreaterThan(0));
+
+            // The whole swept path is open air.
+            for (float x = 5f; x <= 27f; x += 1f)
+            {
+                float density = sampler.Sample(x, 8f, 8f);
+                Assert.That(density, Is.LessThan(SurfaceNetsMesher.IsoLevel),
+                    $"tunnel blocked at x={x:F0} (density {density:F3})");
+            }
+
+            // Rock far from the path stays solid.
+            Assert.That(sampler.Sample(8f, 14f, 2f), Is.GreaterThanOrEqualTo(SurfaceNetsMesher.IsoLevel));
+
+            TerrainDeformer.ResetJournal();
+        }
+
+        // ---- CaveAmbientTint ----
+
+        [Test]
+        public void AmbientTint_DarkensCoveredVerticesOnly()
+        {
+            VoxelStoreAsset store = BuildSolidStoreWithRoom(out Vector3 roomCenter);
+            var sampler = new VoxelWorldSampler(store, 16f);
+
+            Color biome = new Color(0.9f, 0.6f, 0.3f, 1f);
+            Color insideRoom = CaveAmbientTint.Shade(sampler, roomCenter, biome, maxRay: 24f, step: 1f);
+            Color aboveRoof = CaveAmbientTint.Shade(sampler, new Vector3(8f, 40f, 8f), biome,
+                maxRay: 24f, step: 1f);
+
+            Assert.That(insideRoom, Is.Not.EqualTo(biome), "room interior must darken");
+            Assert.That(aboveRoof, Is.EqualTo(biome), "open-sky vertex passes through untouched");
+            Assert.That(insideRoom.r, Is.LessThan(biome.r));
+
+            // Deep cover converges toward the shadow color; shallow cover blends lightly.
+            Color deep = CaveAmbientTint.Apply(biome, CaveAmbientTint.FullShadeCover * 2f, true);
+            Color shallow = CaveAmbientTint.Apply(biome, 1.5f, true);
+            Assert.That(deep.r, Is.LessThan(shallow.r));
+            Color openSky = CaveAmbientTint.Apply(biome, 99f, false);
+            Assert.That(openSky, Is.EqualTo(biome));
+        }
+
+        [Test]
+        public void ClassifierBatch_MatchesSingleSample()
+        {
+            VoxelStoreAsset store = BuildSolidStoreWithRoom(out Vector3 roomCenter);
+            var sampler = new VoxelWorldSampler(store, 16f);
+
+            var flooded = new ConstantWater(new WaterSample(
+                FluidType.Water, 12f, 12f - roomCenter.y, Vector3.zero, 0f, 1, 100));
+
+            var positions = new[]
+            {
+                roomCenter,
+                new Vector3(8f, 40f, 8f),
+                Vector3.zero
+            };
+            var results = new EnvironmentDomain[positions.Length];
+
+            int written = EnvironmentClassifier.ClassifyBatch(flooded, sampler, positions, results,
+                maxCoverRay: 48f);
+
+            Assert.That(written, Is.EqualTo(positions.Length));
+            Assert.That(results[0], Is.EqualTo(EnvironmentClassifier.Classify(
+                flooded, sampler, positions[0], maxCoverRay: 48f)));
+            Assert.That(results[0], Is.EqualTo(EnvironmentDomain.FloodedCave));
+            Assert.That(results[1], Is.EqualTo(EnvironmentDomain.Underwater));
+        }
+
+        // ---- UndergroundProbe / EnvironmentClassifier ----        /// <summary>Fills every chunk in [-1..1]³ solid, then hollows a box room at the centre.</summary>
         private static VoxelStoreAsset BuildSolidStoreWithRoom(out Vector3 roomCenter)
         {
             const int resolution = 16;

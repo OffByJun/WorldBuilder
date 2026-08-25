@@ -107,5 +107,23 @@ namespace WorldBuilder.Runtime.Environment
 
             return EnvironmentDomain.OpenAir;
         }
+
+        /// <summary>
+        /// Classifies many positions in one call; <paramref name="results"/> must be at
+        /// least as long as <paramref name="positions"/>. Returns the count written.
+        /// </summary>
+        public static int ClassifyBatch(IWaterQueryService water, VoxelWorldSampler sampler,
+            Vector3[] positions, EnvironmentDomain[] results, float maxCoverRay = 160f,
+            float submergedEpsilon = 0.05f)
+        {
+            if (positions == null) throw new ArgumentNullException(nameof(positions));
+            if (results == null) throw new ArgumentNullException(nameof(results));
+            if (results.Length < positions.Length)
+                throw new ArgumentException("Results must fit every position.", nameof(results));
+
+            for (int i = 0; i < positions.Length; i++)
+                results[i] = Classify(water, sampler, positions[i], maxCoverRay, submergedEpsilon);
+            return positions.Length;
+        }
     }
 }
