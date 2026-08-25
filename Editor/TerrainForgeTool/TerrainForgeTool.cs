@@ -14,6 +14,7 @@ using WorldBuilder.Editor.ScatterBakeTool;
 using WorldBuilder.Runtime.Data;
 using WorldBuilder.Runtime.Environment;
 using WorldBuilder.Runtime.Terrain;
+using WorldBuilder.Runtime.Water;
 using Debug = UnityEngine.Debug;
 
 namespace WorldBuilder.Editor.TerrainForgeTool
@@ -40,6 +41,7 @@ namespace WorldBuilder.Editor.TerrainForgeTool
         [SerializeField] private Material terrainMaterial;
         [SerializeField] private ScatterRuleSet ruleSet;
         [SerializeField] private int ecologySeed = 7;
+        [SerializeField] private WaterWorldRuntimeData waterData;
         [SerializeField] private string outputFolder = "Assets/WorldBuilderGenerated/Terrain";
         [SerializeField] private bool showCrossSection = true;
         [SerializeField] private CaveShapeParams caveParams;
@@ -227,11 +229,24 @@ namespace WorldBuilder.Editor.TerrainForgeTool
             rulesField.RegisterValueChangedCallback(evt => ruleSet = evt.newValue as ScatterRuleSet);
             ecologyFoldout.Add(rulesField);
 
+            ObjectField waterField = new ObjectField("Water Runtime Data")
+            {
+                objectType = typeof(WaterWorldRuntimeData),
+                value = waterData,
+                tooltip = "Optional. Enables underwater depth/flow gates for surface scatter rules."
+            };
+            waterField.RegisterValueChangedCallback(evt => waterData = evt.newValue as WaterWorldRuntimeData);
+            ecologyFoldout.Add(waterField);
+
             IntegerField ecoSeed = new IntegerField("Ecology Seed") { value = ecologySeed };
             ecoSeed.RegisterValueChangedCallback(evt => ecologySeed = evt.newValue);
             ecologyFoldout.Add(ecoSeed);
 
             ecologyFoldout.Add(new Button(ScatterEcology) { text = WorldBuilderLocalization.Get("btn.scatterEcology") });
+            ecologyFoldout.Add(new Button(ScatterCaveInterior)
+            {
+                text = "Scatter Cave Interior"
+            });
             root.Add(ecologyFoldout);
 
             // ---- Caves ----
@@ -799,10 +814,48 @@ namespace WorldBuilder.Editor.TerrainForgeTool
             Vector3 pivot = view != null ? view.pivot : Vector3.zero;
             var bounds = new Rect(pivot.x - radius, pivot.z - radius, radius * 2f, radius * 2f);
 
-            var query = new VoxelTerrainQuery(store, ChunkSize, biomeMap);
+            var query = new VoxelTerrainQuery(store, ChunkSize, biomeMap, waterData);
             System.Collections.Generic.List<PcgPlacement> placements =
                 PcgScatterEngine.Generate(ruleSet, query, bounds, ecologySeed);
 
+            BakePlacements(placements, bridge, "Ecology");
+        }
+
+        private void ScatterCaveInterior()
+        {
+            if (ruleSet == null)
+            {
+                SetStatus("Assign a Scatter Rule Set first.");
+                return;
+            }
+            BlenderBridgeSettings bridge = ChunkManifestImporter.FindSettings(false);
+            if (bridge == null || bridge.WorldGrid == null)
+            {
+                SetStatus("BlenderBridgeSettings required to bake placements.");
+                return;
+            }
+
+            SceneView view = SceneView.lastActiveSceneView;
+            Vector3 pivot = view != null ? view.pivot : Vector3.zero;
+
+            float chunkSize = ChunkSize;
+            var sampler = new VoxelWorldSampler(store, chunkSize);
+            var query = new VoxelVolumeQuery(sampler, chunkSize, biomeMap);
+            var volume = new Bounds(new Vector3(pivot.x, caveParams != null
+                ? (caveParams.minY + caveParams.maxY) * 0.5f : 0f, pivot.z),
+                new Vector3(radius * 2f,
+                    caveParams != null ? Mathf.Max(8f, caveParams.maxY - caveParams.minY) : 64f,
+                    radius * 2f));
+
+            System.Collections.Generic.List<PcgPlacement> placements =
+                VoxelVolumeScatter.Generate(ruleSet, query, volume, ecologySeed);
+
+            BakePlacements(placements, bridge, "Cave Ecology");
+        }
+
+        private void BakePlacements(System.Collections.Generic.List<PcgPlacement> placements,
+            BlenderBridgeSettings bridge, string label)
+        {
             var brushPlacements = new System.Collections.Generic.List<BrushPlacement>(placements.Count);
             for (int i = 0; i < placements.Count; i++)
             {
@@ -816,9 +869,9 @@ namespace WorldBuilder.Editor.TerrainForgeTool
             }
 
             ScatterChunkBaker.BakeSummary summary = ScatterChunkBaker.BakePlacements(brushPlacements, bridge);
-            SetStatus($"Ecology: {placements.Count} candidate(s), {summary.PlacementsAdded} baked into " +
+            SetStatus($"{label}: {placements.Count} candidate(s), {summary.PlacementsAdded} baked into " +
                       $"{summary.ChunksUpdated} chunk(s). Skipped: {summary.Skipped.Count}.");
-            UndoHistory.Push($"Scatter Ecology ({summary.PlacementsAdded})");
+            UndoHistory.Push($"{label} ({summary.PlacementsAdded})");
         }
 
         private void ApplyCavePreset(CavePreset preset)
@@ -909,19 +962,22 @@ namespace WorldBuilder.Editor.TerrainForgeTool
             }
         }
 
-        private sealed class VoxelTerrainQuery : ITerrainQuery
+        private sealed class VoxelTerrainQuery : ITerrainQuery, IWaterAwareTerrainQuery
         {
             private readonly VoxelStoreAsset store;
             private readonly float chunkSize;
             private readonly HighResBiomeMap biomes;
             private readonly VoxelWorldSampler sampler;
+            private readonly WaterQueryService water;
 
-            public VoxelTerrainQuery(VoxelStoreAsset store, float chunkSize, HighResBiomeMap biomes)
+            public VoxelTerrainQuery(VoxelStoreAsset store, float chunkSize, HighResBiomeMap biomes,
+                WaterWorldRuntimeData waterData = null)
             {
                 this.store = store;
                 this.chunkSize = chunkSize;
                 this.biomes = biomes;
                 sampler = new VoxelWorldSampler(store, chunkSize);
+                water = waterData != null ? new WaterQueryService(waterData) : null;
             }
 
             public bool TryHeight(Vector2 worldXz, out float height)
@@ -941,6 +997,18 @@ namespace WorldBuilder.Editor.TerrainForgeTool
                 }
                 height = default;
                 return false;
+            }
+
+            public bool TrySampleWater(Vector3 worldXzAtTerrainHeight,
+                out WorldBuilder.Runtime.Water.WaterSample sample)
+            {
+                if (water == null)
+                {
+                    sample = default;
+                    return false;
+                }
+                sample = water.Sample(worldXzAtTerrainHeight);
+                return sample.IsInWater && sample.Depth > 0.05f;
             }
 
             public float Slope(Vector2 worldXz)

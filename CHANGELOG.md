@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.12.1 — Audit & Tool Wiring
+
+### 검증(Audit)
+
+* `WorldAuditRules` — 복셀 스토어 직접 검사 3종:
+  **고아 청크**(축 방향 이웃 전무+고형 비율 상한), **밀도 이상**(NaN/범위 밖),
+  **경계 불연속**(인접 청크 접촉면 밀도 불일치 → 세이브/수동 편집 후 잠재적 심 감지)
+* `WorldBuilder/Audit/Run Terrain Checks` 메뉴 — 콘솔 리포트 출력
+
+### Terrain Forge 연동 완성
+
+* 수중 게이트가 실제로 작동 — `waterData` 필드 추가 시 `VoxelTerrainQuery`가
+  `IWaterAwareTerrainQuery`로 동작해 Coral/Kelp 규칙의 수심·유속 게이트가 적용됨
+* **Scatter Cave Interior** 버튼 — 카브 파라미터의 Y 범위를 부피로 하여
+  `VoxelVolumeScatter`로 동굴 내부(광맥/이끼) 배치를 청크에 굽기
+* `WorldBuilder/PCG/Create Rule Set/*` 메뉴 — 생태 프리셋 에셋 즉석 생성
+
+### 테스트
+
+* 고아 청크 플래그/해제, NaN·범위 이상 탐지, 경계 불일치 보고 테스트 3건 추가
+
 ## 0.12.0 — Authoring Batch 2
 
 ### PCG
