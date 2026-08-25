@@ -49,7 +49,7 @@ namespace WorldBuilder.Runtime.Water
         {
             WaterSample selected = data.HasOcean && position.y < data.SeaLevel
                 ? new WaterSample(FluidType.Water, data.SeaLevel, data.SeaLevel - position.y,
-                    Vector3.zero, 0f, data.OceanBodyId, data.OceanPriority)
+                    data.OceanFlowDirection, data.OceanFlowSpeed, data.OceanBodyId, data.OceanPriority)
                 : WaterSample.Air;
 
             QueryCellCoord coordinate = new QueryCellCoord(
@@ -88,7 +88,33 @@ namespace WorldBuilder.Runtime.Water
                 Select(ref selected, candidate);
             }
 
-            return selected;
+            return ApplyCurrentOverride(selected, cell, position);
+        }
+
+        /// <summary>
+        /// Current zones do not add water — they redirect whatever water already won the
+        /// priority selection. The highest-priority containing zone replaces the flow.
+        /// </summary>
+        private WaterSample ApplyCurrentOverride(WaterSample selected, WaterQueryCellData cell,
+            Vector3 position)
+        {
+            if (!selected.IsInWater || cell.currentIndexCount == 0) return selected;
+
+            int bestZone = -1;
+            int bestPriority = int.MinValue;
+            for (int i = 0; i < cell.currentIndexCount; i++)
+            {
+                CurrentZoneData zone = data.Currents[data.CurrentIndices[cell.currentIndexStart + i]];
+                if (!zone.bounds.Contains(position)) continue;
+                if (zone.priority <= bestPriority) continue;
+                bestPriority = zone.priority;
+                bestZone = data.CurrentIndices[cell.currentIndexStart + i];
+            }
+            if (bestZone < 0) return selected;
+
+            CurrentZoneData winner = data.Currents[bestZone];
+            return new WaterSample(selected.FluidType, selected.SurfaceHeight, selected.Depth,
+                winner.direction, winner.speed, selected.WaterBodyId, selected.Priority);
         }
 
         public int SampleBatch(Vector3[] positions, WaterSample[] results)

@@ -7,6 +7,7 @@ using WorldBuilder.Authoring.Water;
 using WorldBuilder.Baking.Core;
 using WorldBuilder.Runtime.Grid;
 using WorldBuilder.Runtime.Water;
+using WorldBuilder.Runtime.Zones;
 
 namespace WorldBuilder.Baking.Water
 {
@@ -24,9 +25,11 @@ namespace WorldBuilder.Baking.Water
             public readonly List<int> rivers = new List<int>();
             public readonly List<int> volumes = new List<int>();
             public readonly List<int> lakes = new List<int>();
+            public readonly List<int> currents = new List<int>();
         }
 
-        public static WaterBakeResult Bake(IEnumerable<WaterBodyAuthoring> source, WorldGridSettings settings)
+        public static WaterBakeResult Bake(IEnumerable<WaterBodyAuthoring> source,
+            WorldGridSettings settings, IEnumerable<WaterCurrentZone> currentZones = null)
         {
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             WorldBakeReport report = new WorldBakeReport();
@@ -40,12 +43,15 @@ namespace WorldBuilder.Baking.Water
             List<RiverSegmentData> rivers = new List<RiverSegmentData>();
             List<BoxVolumeData> volumes = new List<BoxVolumeData>();
             List<LakeData> lakes = new List<LakeData>();
+            List<CurrentZoneData> currents = new List<CurrentZoneData>();
             List<Vector2> lakeVertices = new List<Vector2>();
             SortedDictionary<QueryCellCoord, CellBuilder> cells = new SortedDictionary<QueryCellCoord, CellBuilder>();
             bool hasOcean = false;
             float seaLevel = 0f;
             int oceanId = 0;
             int oceanPriority = 0;
+            Vector3 oceanFlowDirection = Vector3.zero;
+            float oceanFlowSpeed = 0f;
 
             for (int bodyIndex = 0; bodyIndex < bodies.Count; bodyIndex++)
             {
@@ -64,6 +70,10 @@ namespace WorldBuilder.Baking.Water
                     seaLevel = ocean.SeaLevel;
                     oceanId = id;
                     oceanPriority = ocean.Priority;
+                    oceanFlowDirection = ocean.BaseFlowDirection.sqrMagnitude > 1e-6f
+                        ? ocean.BaseFlowDirection.normalized
+                        : Vector3.zero;
+                    oceanFlowSpeed = ocean.BaseFlowSpeed;
                 }
                 else if (body is RiverWaterBody river)
                 {
@@ -90,15 +100,20 @@ namespace WorldBuilder.Baking.Water
                 }
             }
 
+            BakeCurrents(currentZones, grid, currents, cells);
+            currents.Sort(CompareCurrents);
+
             List<WaterQueryCellData> cellData = new List<WaterQueryCellData>(cells.Count);
             List<int> riverIndices = new List<int>();
             List<int> volumeIndices = new List<int>();
             List<int> lakeIndices = new List<int>();
+            List<int> currentIndices = new List<int>();
             foreach (KeyValuePair<QueryCellCoord, CellBuilder> pair in cells)
             {
                 SortUnique(pair.Value.rivers);
                 SortUnique(pair.Value.volumes);
                 SortUnique(pair.Value.lakes);
+                SortUnique(pair.Value.currents);
                 WaterQueryCellData item = new WaterQueryCellData
                 {
                     coordinate = pair.Key,
@@ -107,22 +122,77 @@ namespace WorldBuilder.Baking.Water
                     volumeIndexStart = volumeIndices.Count,
                     volumeIndexCount = pair.Value.volumes.Count,
                     lakeIndexStart = lakeIndices.Count,
-                    lakeIndexCount = pair.Value.lakes.Count
+                    lakeIndexCount = pair.Value.lakes.Count,
+                    currentIndexStart = currentIndices.Count,
+                    currentIndexCount = pair.Value.currents.Count
                 };
                 riverIndices.AddRange(pair.Value.rivers);
                 volumeIndices.AddRange(pair.Value.volumes);
                 lakeIndices.AddRange(pair.Value.lakes);
+                currentIndices.AddRange(pair.Value.currents);
                 cellData.Add(item);
             }
 
             string hash = BuildHash(settings, hasOcean, seaLevel, oceanId, oceanPriority,
-                rivers, volumes, lakes, lakeVertices, cellData, riverIndices, volumeIndices, lakeIndices);
+                oceanFlowDirection, oceanFlowSpeed, rivers, volumes, lakes, currents, lakeVertices,
+                cellData, riverIndices, volumeIndices, lakeIndices, currentIndices);
             WaterWorldRuntimeData data = ScriptableObject.CreateInstance<WaterWorldRuntimeData>();
             data.Initialize(settings.WorldOrigin, settings.QueryCellSize, hasOcean, seaLevel, oceanId, oceanPriority,
-                rivers.ToArray(), volumes.ToArray(), lakes.ToArray(), lakeVertices.ToArray(), cellData.ToArray(),
-                riverIndices.ToArray(), volumeIndices.ToArray(), lakeIndices.ToArray(), hash);
+                oceanFlowDirection, oceanFlowSpeed, rivers.ToArray(), volumes.ToArray(), lakes.ToArray(),
+                currents.ToArray(), lakeVertices.ToArray(), cellData.ToArray(),
+                riverIndices.ToArray(), volumeIndices.ToArray(), lakeIndices.ToArray(),
+                currentIndices.ToArray(), hash);
             report.Sort();
             return new WaterBakeResult(data, report);
+        }
+
+        private static void BakeCurrents(IEnumerable<WaterCurrentZone> zones, WorldGrid grid,
+            List<CurrentZoneData> output, SortedDictionary<QueryCellCoord, CellBuilder> cells)
+        {
+            if (zones == null) return;
+            foreach (WaterCurrentZone zone in zones)
+            {
+                if (zone == null) continue;
+                Vector3 direction = zone.Direction.sqrMagnitude > 1e-6f
+                    ? zone.Direction.normalized
+                    : Vector3.zero;
+                CurrentZoneData item = new CurrentZoneData
+                {
+                    bounds = zone.GetWorldBounds(),
+                    direction = direction,
+                    speed = zone.Strength,
+                    bodyId = DeterministicHash.StableInt32(StablePath(zone)),
+                    priority = zone.Priority
+                };
+                int index = output.Count;
+                output.Add(item);
+                Register(item.bounds, grid, cells, builder => builder.currents.Add(index));
+            }
+        }
+
+        private static string StablePath(WaterCurrentZone zone)
+        {
+            string scenePath = zone.gameObject.scene.path;
+            if (string.IsNullOrEmpty(scenePath)) scenePath = zone.gameObject.scene.name;
+            return $"current:{scenePath}:{GetHierarchyPath(zone.transform)}";
+        }
+
+        private static string GetHierarchyPath(Transform transform)
+        {
+            string path = transform.name;
+            Transform current = transform.parent;
+            while (current != null)
+            {
+                path = current.name + "/" + path;
+                current = current.parent;
+            }
+            return path;
+        }
+
+        private static int CompareCurrents(CurrentZoneData left, CurrentZoneData right)
+        {
+            int id = left.bodyId.CompareTo(right.bodyId);
+            return id != 0 ? id : left.priority.CompareTo(right.priority);
         }
 
         private static void BakeRiver(RiverWaterBody river, int id, WorldGrid grid,
@@ -264,14 +334,18 @@ namespace WorldBuilder.Baking.Water
         }
 
         private static string BuildHash(WorldGridSettings settings, bool ocean, float level, int oceanId,
-            int oceanPriority, List<RiverSegmentData> rivers, List<BoxVolumeData> volumes, List<LakeData> lakes,
-            List<Vector2> vertices, List<WaterQueryCellData> cells, List<int> riverIndices,
-            List<int> volumeIndices, List<int> lakeIndices)
+            int oceanPriority, Vector3 oceanFlowDirection, float oceanFlowSpeed,
+            List<RiverSegmentData> rivers, List<BoxVolumeData> volumes, List<LakeData> lakes,
+            List<CurrentZoneData> currents, List<Vector2> vertices, List<WaterQueryCellData> cells,
+            List<int> riverIndices, List<int> volumeIndices, List<int> lakeIndices,
+            List<int> currentIndices)
         {
             StringBuilder text = new StringBuilder();
             text.Append(F(settings.QueryCellSize)).Append('|').Append(F(settings.WorldOrigin.x)).Append('|')
                 .Append(F(settings.WorldOrigin.y)).Append('|').Append(F(settings.WorldOrigin.z)).Append('\n');
-            text.Append(ocean ? 1 : 0).Append('|').Append(F(level)).Append('|').Append(oceanId).Append('|').Append(oceanPriority).Append('\n');
+            text.Append(ocean ? 1 : 0).Append('|').Append(F(level)).Append('|').Append(oceanId).Append('|')
+                .Append(oceanPriority).Append('|').Append(V(oceanFlowDirection)).Append('|')
+                .Append(F(oceanFlowSpeed)).Append('\n');
             foreach (RiverSegmentData v in rivers) text.Append("R|").Append(V(v.start)).Append('|').Append(V(v.end)).Append('|')
                 .Append(F(v.startWidth)).Append('|').Append(F(v.endWidth)).Append('|').Append(F(v.startDepth)).Append('|')
                 .Append(F(v.endDepth)).Append('|').Append(v.bodyId).Append('|').Append(v.priority).Append('\n');
@@ -279,14 +353,22 @@ namespace WorldBuilder.Baking.Water
                 .Append((int)v.fluidType).Append('|').Append(Matrix(v.worldToUnitBox)).Append('\n');
             foreach (LakeData v in lakes) text.Append("L|").Append(v.bodyId).Append('|').Append(v.priority).Append('|')
                 .Append(v.vertexStart).Append('|').Append(v.vertexCount).Append('|').Append(F(v.surfaceHeight)).Append('|').Append(F(v.depth)).Append('\n');
+            foreach (CurrentZoneData v in currents) text.Append("Z|").Append(Bounds(v.bounds)).Append('|')
+                .Append(V(v.direction)).Append('|').Append(F(v.speed)).Append('|').Append(v.bodyId).Append('|')
+                .Append(v.priority).Append('\n');
             foreach (Vector2 v in vertices) text.Append("V|").Append(F(v.x)).Append('|').Append(F(v.y)).Append('\n');
             foreach (WaterQueryCellData v in cells) text.Append("C|").Append(v.coordinate.X).Append('|').Append(v.coordinate.Z).Append('|')
                 .Append(v.riverIndexStart).Append('|').Append(v.riverIndexCount).Append('|').Append(v.volumeIndexStart).Append('|')
-                .Append(v.volumeIndexCount).Append('|').Append(v.lakeIndexStart).Append('|').Append(v.lakeIndexCount).Append('\n');
+                .Append(v.volumeIndexCount).Append('|').Append(v.lakeIndexStart).Append('|').Append(v.lakeIndexCount).Append('|')
+                .Append(v.currentIndexStart).Append('|').Append(v.currentIndexCount).Append('\n');
             text.Append("RI|").Append(string.Join(",", riverIndices)).Append("\nVI|").Append(string.Join(",", volumeIndices))
-                .Append("\nLI|").Append(string.Join(",", lakeIndices));
+                .Append("\nLI|").Append(string.Join(",", lakeIndices))
+                .Append("\nZI|").Append(string.Join(",", currentIndices));
             return DeterministicHash.Sha256(text.ToString());
         }
+
+        private static string Bounds(Bounds value) =>
+            V(value.center) + "," + V(value.size);
 
         private static string F(float value) => value.ToString("R", CultureInfo.InvariantCulture);
         private static string V(Vector3 value) => F(value.x) + "," + F(value.y) + "," + F(value.z);

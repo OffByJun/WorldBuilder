@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.10.0 — Water Flow
+
+### 해류·물 흐름 시스템
+
+* **바다 기본 해류** — `OceanWaterBody.BaseFlowDirection/BaseFlowSpeed` 추가. 수면 아래 모든
+  바다 샘플에 전역 흐름이 실린다 (`WaterSample.FlowDirection/FlowSpeed`)
+* **`WaterCurrentZone`이 드디어 파이프라인에 합류** — 기존엔 베이크되지 않던 컴포넌트를
+  `CurrentZoneData`로 베이크. 존은 물을 만들지 않고 "이긴 물의 흐름을 교체"한다
+  → 폭포 하강 기류, 소용돌이, 강 하구 역류 등 바다/호수/강 어디든 얹을 수 있음
+  (우선순위 겹침 처리 포함, 셀 인덱스 + 결정론 해시에 완전 반영)
+* 시리얼 `WaterQueryService`와 Burst `NativeWaterQuery`가 동일 의미론으로 확장 —
+  기존 패리티 테스트가 양쪽 일치를 자동 검증
+
+### 표류(Drift) 시스템
+
+* `WaterDrift.Integrate` — 순수 상태 적분 수학: 흐름 가속(항력은 편차에만 작용해 강류 속도가
+  항상 우세), 부력 스프링(수면 부양선 수렴), 침하 모드, 공기 중 중력
+* `WaterDrifter` MonoBehaviour + 정적 레지스트리 — 서비스 주입형(FixedUpdate), 부양 시 흐름
+  방향으로 부드러운 선회. 배·파편·플레이어 표류에 즉시 사용 가능
+
+### 테스트
+
+* 해류 전역 적용, 존 오버라이드(경계 밖/공기 무시), 다중 존 우선순위, 흐름 수렴·부양 수렴·침하 테스트 6건 추가
+
 ## 0.9.1 — Cave Authoring Bridge
 
 ### Blender 애드온

@@ -110,9 +110,10 @@ namespace WorldBuilder.Tests
 
             data.Initialize(
                 Vector3.zero, 32f, false, -999f, 0, 0,
-                rivers, volumes, lakes, vertices, cells.ToArray(),
+                Vector3.zero, 0f,
+                rivers, volumes, lakes, System.Array.Empty<CurrentZoneData>(), vertices, cells.ToArray(),
                 riverIndices.ToArray(), volumeIndices.ToArray(), lakeIndices.ToArray(),
-                "test-hash");
+                System.Array.Empty<int>(), "test-hash");
         }
 
         [TearDown]

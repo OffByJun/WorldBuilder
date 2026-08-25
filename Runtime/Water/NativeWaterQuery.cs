@@ -22,11 +22,13 @@ namespace WorldBuilder.Runtime.Water
         private NativeArray<RiverSegmentData> rivers;
         private NativeArray<BoxVolumeData> volumes;
         private NativeArray<LakeData> lakes;
+        private NativeArray<CurrentZoneData> currents;
         private NativeArray<Vector2> lakeVertices;
         private NativeArray<WaterQueryCellData> cells;
         private NativeArray<int> riverIndices;
         private NativeArray<int> volumeIndices;
         private NativeArray<int> lakeIndices;
+        private NativeArray<int> currentIndices;
 
         public bool IsCreated { get; private set; }
 
@@ -36,22 +38,26 @@ namespace WorldBuilder.Runtime.Water
         {
             if (data == null) throw new ArgumentNullException(nameof(data));
 
-            worldOrigin = new NativeArray<Vector3>(1, allocator);
+            worldOrigin = new NativeArray<Vector3>(2, allocator);
             worldOrigin[0] = data.WorldOrigin;
-            scalars = new NativeArray<float>(2, allocator);
+            worldOrigin[1] = data.OceanFlowDirection;
+            scalars = new NativeArray<float>(3, allocator);
             scalars[0] = data.QueryCellSize;
             scalars[1] = data.SeaLevel;
+            scalars[2] = data.OceanFlowSpeed;
             hasOcean = new NativeArray<bool>(1, allocator);
             hasOcean[0] = data.HasOcean;
 
             rivers = Copy(data.RiverSegments, allocator);
             volumes = Copy(data.Volumes, allocator);
             lakes = Copy(data.Lakes, allocator);
+            currents = Copy(data.Currents, allocator);
             lakeVertices = Copy(data.LakeVertices, allocator);
             cells = Copy(data.Cells, allocator);
             riverIndices = Copy(data.RiverIndices, allocator);
             volumeIndices = Copy(data.VolumeIndices, allocator);
             lakeIndices = Copy(data.LakeIndices, allocator);
+            currentIndices = Copy(data.CurrentIndices, allocator);
 
             oceanMeta = new NativeArray<int>(2, allocator);
             oceanMeta[0] = data.OceanBodyId;
@@ -81,11 +87,13 @@ namespace WorldBuilder.Runtime.Water
                 rivers = rivers,
                 volumes = volumes,
                 lakes = lakes,
+                currents = currents,
                 lakeVertices = lakeVertices,
                 cells = cells,
                 riverIndices = riverIndices,
                 volumeIndices = volumeIndices,
-                lakeIndices = lakeIndices
+                lakeIndices = lakeIndices,
+                currentIndices = currentIndices
             };
             return job.Schedule(positions.Length, 64, dependsOn);
         }
@@ -100,11 +108,13 @@ namespace WorldBuilder.Runtime.Water
             rivers.Dispose();
             volumes.Dispose();
             lakes.Dispose();
+            currents.Dispose();
             lakeVertices.Dispose();
             cells.Dispose();
             riverIndices.Dispose();
             volumeIndices.Dispose();
             lakeIndices.Dispose();
+            currentIndices.Dispose();
             IsCreated = false;
         }
     }
@@ -122,11 +132,13 @@ namespace WorldBuilder.Runtime.Water
         [ReadOnly] public NativeArray<RiverSegmentData> rivers;
         [ReadOnly] public NativeArray<BoxVolumeData> volumes;
         [ReadOnly] public NativeArray<LakeData> lakes;
+        [ReadOnly] public NativeArray<CurrentZoneData> currents;
         [ReadOnly] public NativeArray<Vector2> lakeVertices;
         [ReadOnly] public NativeArray<WaterQueryCellData> cells;
         [ReadOnly] public NativeArray<int> riverIndices;
         [ReadOnly] public NativeArray<int> volumeIndices;
         [ReadOnly] public NativeArray<int> lakeIndices;
+        [ReadOnly] public NativeArray<int> currentIndices;
 
         public void Execute(int index)
         {
@@ -136,7 +148,7 @@ namespace WorldBuilder.Runtime.Water
             if (hasOcean[0] && position.y < scalars[1])
             {
                 selected = new WaterSample(FluidType.Water, scalars[1], scalars[1] - position.y,
-                    Vector3.zero, 0f, oceanMeta[0], oceanMeta[1]);
+                    worldOrigin[1], scalars[2], oceanMeta[0], oceanMeta[1]);
             }
 
             QueryCellCoord coordinate = new QueryCellCoord(
@@ -174,9 +186,35 @@ namespace WorldBuilder.Runtime.Water
                         lake.surfaceHeight - position.y, Vector3.zero, 0f, lake.bodyId, lake.priority);
                     Select(ref selected, candidate);
                 }
+
+                selected = ApplyCurrentOverride(selected, cell, position);
             }
 
             results[index] = selected;
+        }
+
+        private WaterSample ApplyCurrentOverride(WaterSample selected, WaterQueryCellData cell,
+            Vector3 position)
+        {
+            if (selected.FluidType != FluidType.Water) return selected;
+            if (cell.currentIndexCount == 0) return selected;
+
+            int bestIndex = -1;
+            int bestPriority = int.MinValue;
+            for (int i = 0; i < cell.currentIndexCount; i++)
+            {
+                int zoneIndex = currentIndices[cell.currentIndexStart + i];
+                CurrentZoneData zone = currents[zoneIndex];
+                if (!zone.bounds.Contains(position)) continue;
+                if (zone.priority <= bestPriority) continue;
+                bestPriority = zone.priority;
+                bestIndex = zoneIndex;
+            }
+            if (bestIndex < 0) return selected;
+
+            CurrentZoneData winner = currents[bestIndex];
+            return new WaterSample(selected.FluidType, selected.SurfaceHeight, selected.Depth,
+                winner.direction, winner.speed, selected.WaterBodyId, selected.Priority);
         }
 
         private int FindCell(QueryCellCoord coordinate)
