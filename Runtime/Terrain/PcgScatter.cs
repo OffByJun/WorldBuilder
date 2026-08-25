@@ -26,6 +26,16 @@ namespace WorldBuilder.Runtime.Terrain
             public bool anyBiome = true;
             public BiomeType biome;
 
+            [Header("Underwater Gate (needs an IWaterAwareTerrainQuery)")]
+            [Tooltip("Enable to restrict placement by water depth instead of elevation only.")]
+            public bool useDepthGate;
+            [Tooltip("Minimum water depth in meters at the placement point.")]
+            public float minDepth;
+            [Tooltip("Maximum water depth in meters; 999 disables the upper bound.")]
+            public float maxDepth = 999f;
+            [Tooltip("Maximum sampled flow speed (m/s); protects corals from torrent zones.")]
+            public float maxFlowSpeed = 999f;
+
             [Header("Density & Placement")]
             [Tooltip("Average instances per square meter.")]
             public float densityPerSquareMeter = 0.01f;
@@ -36,6 +46,15 @@ namespace WorldBuilder.Runtime.Terrain
         }
 
         public List<Rule> rules = new List<Rule>();
+    }
+
+    /// <summary>
+    /// Optional extension for terrain queries that know about water — enables the
+    /// underwater depth/flow gates on scatter rules.
+    /// </summary>
+    public interface IWaterAwareTerrainQuery
+    {
+        bool TrySampleWater(Vector3 worldXzAtTerrainHeight, out WorldBuilder.Runtime.Water.WaterSample sample);
     }
 
     public struct PcgPlacement
@@ -108,6 +127,8 @@ namespace WorldBuilder.Runtime.Terrain
                         if (!rule.anyBiome && biome != rule.biome) continue;
                         if (height < rule.minElevation || height > rule.maxElevation) continue;
 
+                        if (!PassesWaterGates(query, rule, px, pz, height)) continue;
+
                         GameObject prefab = rule.prefabs[random.NextInt(0, rule.prefabs.Count)];
                         if (prefab == null) continue;
 
@@ -131,6 +152,23 @@ namespace WorldBuilder.Runtime.Terrain
                 }
             }
             return results;
+        }
+
+        private static bool PassesWaterGates(ITerrainQuery query, ScatterRuleSet.Rule rule,
+            float px, float pz, float terrainHeight)
+        {
+            bool needsDepth = rule.useDepthGate;
+            bool needsFlow = rule.maxFlowSpeed < 999f;
+            if (!needsDepth && !needsFlow) return true;
+            if (query is not IWaterAwareTerrainQuery waterQuery) return false;
+
+            if (!waterQuery.TrySampleWater(new Vector3(px, terrainHeight, pz),
+                    out WorldBuilder.Runtime.Water.WaterSample sample))
+                return false; // gate requested but point is dry
+
+            if (needsDepth && (sample.Depth < rule.minDepth || sample.Depth > rule.maxDepth)) return false;
+            if (needsFlow && sample.FlowSpeed > rule.maxFlowSpeed) return false;
+            return true;
         }
 
         private static Vector3 SurfaceNormal(ITerrainQuery query, Vector2 xz)

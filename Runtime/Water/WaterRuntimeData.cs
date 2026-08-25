@@ -97,12 +97,30 @@ namespace WorldBuilder.Runtime.Water
         [SerializeField] private float oceanFlowSpeed;
         [SerializeField] private string deterministicHash = string.Empty;
 
+        // Runtime-only weather/state adjustments (never baked, never hashed).
+        [NonSerialized] private float runtimeSeaLevelOffset;
+        [NonSerialized] private float runtimeFlowSpeedMultiplier = 1f;
+
         public Vector3 WorldOrigin => worldOrigin;
         public float QueryCellSize => queryCellSize;
         public bool HasOcean => hasOcean;
+
+        /// <summary>Baked sea level; use <see cref="SeaLevelEffective"/> for queries.</summary>
         public float SeaLevel => seaLevel;
+        public float SeaLevelEffective => seaLevel + runtimeSeaLevelOffset;
         public int OceanBodyId => oceanBodyId;
         public int OceanPriority => oceanPriority;
+        /// <summary>Flow multiplier applied on top of every sampled speed.</summary>
+        public float FlowSpeedMultiplier => runtimeFlowSpeedMultiplier;
+
+        /// <summary>Weather/drought systems push sea level up or down at runtime.</summary>
+        public void SetRuntimeSeaLevelOffset(float offset) => runtimeSeaLevelOffset = offset;
+
+        /// <summary>Rain raises river speeds, droughts slow them (clamped ≥ 0).</summary>
+        public void SetRuntimeFlowSpeedMultiplier(float multiplier) =>
+            runtimeFlowSpeedMultiplier = Mathf.Max(0f, multiplier);
+
+        public float EffectiveRiverSpeed(float baseSpeed) => baseSpeed * runtimeFlowSpeedMultiplier;
         public Vector3 OceanFlowDirection => oceanFlowDirection;
         public float OceanFlowSpeed => oceanFlowSpeed;
         public RiverSegmentData[] RiverSegments => riverSegments;

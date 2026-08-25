@@ -55,6 +55,10 @@ namespace WorldBuilder.Runtime.Terrain
         [Tooltip("Multiplier applied to the combined carve field before subtraction.")]
         [Range(0.5f, 2f)] public float carveSharpness = 1.15f;
 
+        [Header("Groundwater")]
+        [Tooltip("World Y of the underground water table; caves carved below this count as flooded. Very low values disable it.")]
+        public float waterTableY = -999f;
+
         private void Reset() => seedOffset = UnityEngine.Random.Range(1, 999999);
     }
 
@@ -223,6 +227,88 @@ namespace WorldBuilder.Runtime.Terrain
                         }
                     }
                 }
+            }
+            return changed;
+        }
+
+        /// <summary>
+        /// Punches walk-in shafts from the surface down into discovered cave air, so
+        /// carved networks are reachable without manual digging. Deterministic via the
+        /// combined seed. Returns the number of voxels changed.
+        /// </summary>
+        public static int CarveEntrances(VoxelStoreAsset store, TerrainField.HeightMap heights,
+            TerrainShapeParams shape, CaveShapeParams caves, float chunkSize,
+            int maxEntrances, float shaftRadius = 1.6f)
+        {
+            if (store == null) throw new ArgumentNullException(nameof(store));
+            if (heights == null) throw new ArgumentNullException(nameof(heights));
+            if (maxEntrances <= 0) return 0;
+
+            uint rngSeed = (uint)(shape.seed * 397 + caves.seedOffset * 2654435761u);
+            if (rngSeed == 0u) rngSeed = 1u;
+            var rng = new Unity.Mathematics.Random(rngSeed);
+
+            int resolution = store.Resolution;
+            var sampler = new VoxelWorldSampler(store, chunkSize);
+            float spacing = chunkSize / resolution;
+
+            // Candidate grid over the heightmap footprint.
+            int minX = Mathf.CeilToInt(heights.Origin.x / chunkSize);
+            int minZ = Mathf.CeilToInt(heights.Origin.y / chunkSize);
+            int spanChunks = Mathf.CeilToInt((heights.Size - 1) * heights.CellSize / chunkSize);
+
+            int placed = 0;
+            int totalChanged = 0;
+            int attempts = 0;
+            const int maxAttempts = 256;
+
+            while (placed < maxEntrances && attempts < maxAttempts)
+            {
+                attempts++;
+
+                int cx = rng.NextInt(minX, minX + Mathf.Max(1, spanChunks));
+                int cz = rng.NextInt(minZ, minZ + Mathf.Max(1, spanChunks));
+
+                Vector2 worldXz = new Vector2((cx + rng.NextFloat()) * chunkSize,
+                    (cz + rng.NextFloat()) * chunkSize);
+                float surface = heights.SampleWorld(worldXz);
+
+                // Find the first open air pocket below the protection shell.
+                float? caveAirY = null;
+                for (float y = surface - caves.surfaceProtectDepth - 1f; y >= caves.minY; y -= spacing)
+                {
+                    if (sampler.Sample(worldXz.x, y, worldXz.y) < SurfaceNetsMesher.IsoLevel)
+                    {
+                        caveAirY = y;
+                        break;
+                    }
+                }
+                if (caveAirY == null) continue;
+
+                // Carve a narrow shaft from just above ground down into that pocket.
+                Vector3 center = new Vector3(worldXz.x, surface + 0.5f, worldXz.y);
+                Vector3 bottom = new Vector3(worldXz.x, caveAirY.Value - shaftRadius, worldXz.y);
+                totalChanged += CarveShaft(store, chunkSize, center, bottom, shaftRadius, spacing);
+                placed++;
+            }
+
+            return totalChanged;
+        }
+
+        private static int CarveShaft(VoxelStoreAsset store, float chunkSize, Vector3 top,
+            Vector3 bottom, float radius, float spacing)
+        {
+            Vector3 span = bottom - top;
+            float length = span.magnitude;
+            if (length < 1e-4f) return 0;
+
+            float step = Mathf.Max(spacing * 0.75f, radius * 0.5f);
+            int samples = Mathf.CeilToInt(length / step);
+            int changed = 0;
+            for (int i = 0; i <= samples; i++)
+            {
+                Vector3 center = top + span * ((float)i / samples);
+                changed += TerrainDeformer.StampSphere(store, chunkSize, center, radius, -1.5f);
             }
             return changed;
         }

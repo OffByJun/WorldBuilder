@@ -162,6 +162,81 @@ namespace WorldBuilder.Runtime.Saves
             return count;
         }
 
+        // ---- Unified snapshot (v2) ----
+
+        [Serializable]
+        private sealed class SnapshotExtrasFile
+        {
+            public int version = 2;
+            public string slot = string.Empty;
+            public string timestampUtc = string.Empty;
+            public string extrasJson = string.Empty;
+        }
+
+        /// <summary>
+        /// One-call world persistence: placements + terrain deltas + arbitrary extras in a
+        /// single versioned bundle. Composes the existing placement/terrain writers, so old
+        /// slots remain loadable and partial reads keep working.
+        /// </summary>
+        public static void SaveSnapshot(string slot,
+            WorldBuilder.Runtime.Data.VoxelStoreAsset store,
+            IEnumerable<Vector3Int> editedChunks, string placementsJson,
+            string extrasJson = null, string worldId = null)
+        {
+            if (string.IsNullOrWhiteSpace(slot)) throw new ArgumentException("Slot name is required.", nameof(slot));
+            Save(slot, placementsJson ?? "{}", worldId);
+            if (store != null) SaveTerrain(slot, store, editedChunks);
+
+            var extras = new SnapshotExtrasFile
+            {
+                slot = slot,
+                timestampUtc = DateTime.UtcNow.ToString("O"),
+                extrasJson = extrasJson ?? string.Empty
+            };
+            string path = Path.Combine(Directory, Sanitize(slot) + "_extras.json");
+            string directory = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(directory)) System.IO.Directory.CreateDirectory(directory);
+            File.WriteAllText(path, JsonUtility.ToJson(extras));
+        }
+
+        /// <summary>
+        /// Restores a snapshot written by <see cref="SaveSnapshot"/>: placements first
+        /// (through <paramref name="prefabResolver"/>), then terrain deltas, then returns
+        /// the extras JSON. Returns false when the slot does not exist.
+        /// </summary>
+        public static bool LoadSnapshot(string slot,
+            WorldBuilder.Runtime.Data.VoxelStoreAsset store,
+            Func<string, GameObject> prefabResolver, out string extrasJson,
+            Action<Vector3Int> chunkRestored = null)
+        {
+            extrasJson = null;
+            if (!Exists(slot)) return false;
+
+            Load(slot, prefabResolver);
+
+            int restoredChunks = store != null ? LoadTerrain(slot, store, chunkRestored) : -1;
+            if (restoredChunks < 0 && !File.Exists(Path.Combine(Directory, Sanitize(slot) + "_terrain.json")))
+            {
+                // No terrain sidecar — legacy placement-only slot still loads fine.
+            }
+
+            string extrasPath = Path.Combine(Directory, Sanitize(slot) + "_extras.json");
+            if (File.Exists(extrasPath))
+            {
+                try
+                {
+                    SnapshotExtrasFile file =
+                        JsonUtility.FromJson<SnapshotExtrasFile>(File.ReadAllText(extrasPath));
+                    extrasJson = file?.extrasJson;
+                }
+                catch (Exception)
+                {
+                    extrasJson = null;
+                }
+            }
+            return true;
+        }
+
         // ---- Terrain deltas ----
 
         [Serializable]

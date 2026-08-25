@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.11.0 — World Flow & Authoring Batch 1
+
+### 지형 저작
+
+* `RiverbedCarver` — 강 중심선 폴리라인을 따라 복셀 하상 채널 자동 절삭(TerrainDeformer 스윕 재사용)
+* `CaveField.CarveEntrances` — 카빙된 동굴 공기 주머니를 향해 표면에서 보행 가능한 샤프트를
+  결정론적으로 관통(시도 상한 내 배치). 밖에서 걸어 들어가는 동굴 완성
+
+### 물 흐름 확장
+
+* **지하수대** — `GroundwaterService`가 waterTableY 아래를 정수로 처리.
+  `EnvironmentClassifier`와 조합 시 테이블 아래 밀폐 공간이 자동으로 FloodedCave.
+  `CaveShapeParams.waterTableY` 필드 추가
+* **날씨→수위 연동** — `WaterLevelDriver`: 0..1 강도(가뭄~홍수) → 해수면 오프셋 + 유속 배수.
+  `WaterWorldRuntimeData`에 런타임 전용 오프셋/배수 적용 API(베이크 데이터 불변), 쿼리 서비스가
+  유효 해수면/유속 사용
+
+### PCG 수중 게이트
+
+* `ScatterRuleSet.Rule`에 수심 밴드(min/maxDepth)·최대 유속 게이트 추가 +
+  `IWaterAwareTerrainQuery` 선택 인터페이스 — 산호/해초/조개 규칙이 실제 수심과 급류를 존중
+
+### 저장
+
+* **통합 월드 세이브 v2** — `SaveSnapshot/LoadSnapshot`: 배치 JSON + 지형 델타 + extras를 한 번에
+  직렬화/복원(기존 슬롯과 하위 호환)
+
+### 테스트
+
+* 지하수 침수 분류, 수위 구동, 수중 게이트 필터, 스냅샷 왕복 테스트 4건 추가
+
 ## 0.10.0 — Water Flow
 
 ### 해류·물 흐름 시스템

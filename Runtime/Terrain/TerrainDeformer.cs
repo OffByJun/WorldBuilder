@@ -109,6 +109,18 @@ namespace WorldBuilder.Runtime.Terrain
             return changed;
         }
 
+        /// <summary>
+        /// Raw spherical stamp without journal/event bookkeeping — for bulk authoring
+        /// operations (riverbed carving, cave entrances) that report once at the end.
+        /// </summary>
+        public static int StampSphere(VoxelStoreAsset store, float chunkSize, Vector3 center,
+            float radius, float delta)
+        {
+            if (store == null) throw new ArgumentNullException(nameof(store));
+            if (radius <= 0f) return 0;
+            return ApplySphere(store, chunkSize, center, radius, delta, new HashSet<Vector3Int>());
+        }
+
         private static int ApplySphere(VoxelStoreAsset store, float chunkSize, Vector3 center,
             float radius, float delta, HashSet<Vector3Int> touched)
         {

@@ -47,9 +47,12 @@ namespace WorldBuilder.Runtime.Water
 
         public WaterSample Sample(Vector3 position)
         {
-            WaterSample selected = data.HasOcean && position.y < data.SeaLevel
-                ? new WaterSample(FluidType.Water, data.SeaLevel, data.SeaLevel - position.y,
-                    data.OceanFlowDirection, data.OceanFlowSpeed, data.OceanBodyId, data.OceanPriority)
+            float seaLevel = data.SeaLevelEffective;
+            float speedScale = data.FlowSpeedMultiplier;
+            WaterSample selected = data.HasOcean && position.y < seaLevel
+                ? new WaterSample(FluidType.Water, seaLevel, seaLevel - position.y,
+                    data.OceanFlowDirection, data.OceanFlowSpeed * speedScale,
+                    data.OceanBodyId, data.OceanPriority)
                 : WaterSample.Air;
 
             QueryCellCoord coordinate = new QueryCellCoord(
@@ -74,7 +77,7 @@ namespace WorldBuilder.Runtime.Water
             for (int i = 0; i < cell.riverIndexCount; i++)
             {
                 RiverSegmentData river = data.RiverSegments[data.RiverIndices[cell.riverIndexStart + i]];
-                if (!TrySampleRiver(river, position, out WaterSample candidate)) continue;
+                if (!TrySampleRiver(river, position, speedScale, out WaterSample candidate)) continue;
                 Select(ref selected, candidate);
             }
 
@@ -157,7 +160,8 @@ namespace WorldBuilder.Runtime.Water
             return inside;
         }
 
-        private static bool TrySampleRiver(RiverSegmentData river, Vector3 position, out WaterSample sample)
+        private static bool TrySampleRiver(RiverSegmentData river, Vector3 position, float speedScale,
+            out WaterSample sample)
         {
             Vector2 start = new Vector2(river.start.x, river.start.z);
             Vector2 end = new Vector2(river.end.x, river.end.z);
@@ -179,7 +183,7 @@ namespace WorldBuilder.Runtime.Water
                 return false;
             }
             sample = new WaterSample(FluidType.Water, surface, surface - position.y,
-                river.flowDirection, river.flowSpeed, river.bodyId, river.priority);
+                river.flowDirection, river.flowSpeed * speedScale, river.bodyId, river.priority);
             return true;
         }
 
