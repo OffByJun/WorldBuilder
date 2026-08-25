@@ -36,6 +36,12 @@ namespace WorldBuilder.Editor.PrefabBrush
         public Vector3 surfaceNormal;
         public BiomeType biome;
         public int seed;
+
+        /// <summary>True when the placement point is below a water surface (0 when dry).</summary>
+        public bool inWater;
+
+        /// <summary>Distance from the water surface down to the placement point, in meters.</summary>
+        public float waterDepth;
     }
 
     public interface IModifierNode

@@ -57,5 +57,26 @@ namespace WorldBuilder.Tests
             Assert.That(loader.unloaded.Count, Is.EqualTo(3));
             Object.DestroyImmediate(settings);
         }
+
+        [Test]
+        public async Task RepeatedSameFocus_IsNoOp()
+        {
+            WorldGridSettings settings = ScriptableObject.CreateInstance<WorldGridSettings>();
+            settings.Configure(128f, 4, 32f, Vector3.zero);
+            Loader loader = new Loader();
+            ChunkStreamingService service = new ChunkStreamingService(settings, loader);
+
+            await service.SetFocusAsync(Vector3.zero, 1, CancellationToken.None);
+            int loadedCount = loader.loaded.Count;
+            int unloadedCount = loader.unloaded.Count;
+
+            await service.SetFocusAsync(Vector3.zero, 1, CancellationToken.None);
+
+            Assert.That(loader.loaded.Count, Is.EqualTo(loadedCount),
+                "identical focus must not reload any region");
+            Assert.That(loader.unloaded.Count, Is.EqualTo(unloadedCount),
+                "identical focus must not unload any region");
+            Object.DestroyImmediate(settings);
+        }
     }
 }

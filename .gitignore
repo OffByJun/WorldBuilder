@@ -1,3 +1,5 @@
-*.meta
 __pycache__/
 *.py[cod]
+*.tmp
+Thumbs.db
+.DS_Store

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using WorldBuilder.Runtime.Water;
 
 namespace WorldBuilder.Editor.PrefabBrush
 {
@@ -9,6 +10,8 @@ namespace WorldBuilder.Editor.PrefabBrush
         public float brushRadius = 3f;
         public int brushDensity = 10;
         public bool eraseMode;
+        public bool paintOnDrag = true;
+        public float dragSpacing = 1f;
         public float chunkSize = 16f;
         public bool alignToNormal = true;
         public bool randomYaw = true;
@@ -18,6 +21,7 @@ namespace WorldBuilder.Editor.PrefabBrush
         public List<PrefabEntry> prefabEntries = new List<PrefabEntry>();
         public BrushMask mask = new BrushMask();
         public ModifierGraph modifierGraph;
+        public WaterWorldRuntimeData waterData;
         public List<BrushStroke> strokes = new List<BrushStroke>();
 
         private void OnEnable()

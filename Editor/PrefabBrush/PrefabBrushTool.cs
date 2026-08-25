@@ -9,6 +9,7 @@ using UnityEngine.UIElements;
 using WorldBuilder.Editor.PrefabBrush.EnvironmentBrush.Coral;
 using WorldBuilder.Editor.PrefabBrush.EnvironmentBrush.Rock;
 using WorldBuilder.Editor.PrefabBrush.EnvironmentBrush.Vegetation;
+using WorldBuilder.Runtime.Water;
 
 namespace WorldBuilder.Editor.PrefabBrush
 {
@@ -19,12 +20,18 @@ namespace WorldBuilder.Editor.PrefabBrush
         private readonly IBiomeMap biomeMap;
         private readonly ChunkCoordCalculator calculator = new ChunkCoordCalculator();
         private readonly Dictionary<Mesh, List<Matrix4x4>> previewBatches = new Dictionary<Mesh, List<Matrix4x4>>();
+        private readonly Dictionary<GameObject, MeshFilter[]> prefabMeshCache = new Dictionary<GameObject, MeshFilter[]>();
 
         private PrefabBrushSettings settings;
         private SpatialHash<GameObject> spatialHash;
         private Material previewMaterial;
         private MaterialPropertyBlock previewBlock;
         private List<IEnvironmentBrush> environmentBrushes;
+        private Vector3 lastPaintPosition;
+        private bool hasLastPaintPosition;
+        private WaterQueryService waterService;
+        private WaterWorldRuntimeData waterDataCache;
+        private PrefabBrushPreset loadedPreset;
 
         public PrefabBrushTool(IBiomeMap biomeMap)
         {
@@ -37,6 +44,8 @@ namespace WorldBuilder.Editor.PrefabBrush
 
         public void OnEnable()
         {
+            prefabMeshCache.Clear();
+            hasLastPaintPosition = false;
             EnsureInit();
             RebuildSpatialHash();
         }
@@ -56,6 +65,7 @@ namespace WorldBuilder.Editor.PrefabBrush
             root.Add(InspectorHelp.Build(ToolName, "help.prefabBrush"));
             root.Add(BuildSeedSection());
             root.Add(BuildBrushSection());
+            root.Add(BuildPresetSection());
             root.Add(BuildPlacementSection());
             root.Add(BuildPrefabSection());
             root.Add(BuildEnvironmentSection());
@@ -109,6 +119,21 @@ namespace WorldBuilder.Editor.PrefabBrush
                     Paint(hit.point);
                 }
 
+                hasLastPaintPosition = true;
+                lastPaintPosition = hit.point;
+                e.Use();
+            }
+            else if (settings.paintOnDrag && !settings.eraseMode &&
+                     e.type == EventType.MouseDrag && e.button == 0 && !e.alt)
+            {
+                float spacing = Mathf.Max(0.05f, settings.dragSpacing);
+                if (!hasLastPaintPosition || Vector3.Distance(lastPaintPosition, hit.point) >= spacing)
+                {
+                    Paint(hit.point);
+                    hasLastPaintPosition = true;
+                    lastPaintPosition = hit.point;
+                }
+
                 e.Use();
             }
         }
@@ -138,6 +163,17 @@ namespace WorldBuilder.Editor.PrefabBrush
                     new CoralBrush(),
                     new RockBrush()
                 };
+            }
+
+            if (settings.waterData != null && (waterService == null || !ReferenceEquals(waterDataCache, settings.waterData)))
+            {
+                waterDataCache = settings.waterData;
+                waterService = new WaterQueryService(settings.waterData);
+            }
+            else if (settings.waterData == null)
+            {
+                waterService = null;
+                waterDataCache = null;
             }
         }
 
@@ -282,9 +318,21 @@ namespace WorldBuilder.Editor.PrefabBrush
                     seed = strokeSeed
                 };
 
+                if (waterService != null)
+                {
+                    WaterSample sample = waterService.Sample(context.position);
+                    modifierContext.inWater = sample.IsInWater;
+                    modifierContext.waterDepth = sample.Depth;
+                }
+
                 context.position += ModifierGraphEvaluator.EvaluatePositionOffset(settings.modifierGraph, modifierContext);
                 context.rotation *= Quaternion.Euler(ModifierGraphEvaluator.EvaluateRotation(settings.modifierGraph, modifierContext));
                 context.scale = Vector3.Scale(context.scale, ModifierGraphEvaluator.EvaluateScale(settings.modifierGraph, modifierContext));
+
+                if (context.scale.sqrMagnitude < 1e-8f)
+                {
+                    continue;
+                }
 
                 placements.Add(new BrushPlacement
                 {
@@ -431,7 +479,8 @@ namespace WorldBuilder.Editor.PrefabBrush
 
         private void Erase(Vector3 center)
         {
-            List<GameObject> hits = spatialHash.Query(center, settings.brushRadius);
+            List<GameObject> hits = new List<GameObject>();
+            spatialHash.Query(center, settings.brushRadius, hits);
             int group = Undo.GetCurrentGroup();
 
             for (int i = 0; i < hits.Count; i++)
@@ -487,7 +536,12 @@ namespace WorldBuilder.Editor.PrefabBrush
                 Matrix4x4 placementMatrix = Matrix4x4.TRS(placements[i].position, placements[i].rotation, placements[i].scale);
                 Matrix4x4 rootInverse = prefab.transform.worldToLocalMatrix;
 
-                MeshFilter[] filters = prefab.GetComponentsInChildren<MeshFilter>();
+                if (!prefabMeshCache.TryGetValue(prefab, out MeshFilter[] filters))
+                {
+                    filters = prefab.GetComponentsInChildren<MeshFilter>();
+                    prefabMeshCache[prefab] = filters;
+                }
+
                 for (int f = 0; f < filters.Length; f++)
                 {
                     Mesh mesh = filters[f].sharedMesh;
@@ -588,7 +642,90 @@ namespace WorldBuilder.Editor.PrefabBrush
             });
             section.Add(erase);
 
+            Toggle paintOnDrag = new Toggle("Paint On Drag") { value = settings.paintOnDrag };
+            paintOnDrag.RegisterValueChangedCallback(evt =>
+            {
+                Undo.RecordObject(settings, "Set Paint On Drag");
+                settings.paintOnDrag = evt.newValue;
+                EditorUtility.SetDirty(settings);
+            });
+            section.Add(paintOnDrag);
+
+            Slider dragSpacing = new Slider("Drag Spacing", 0.05f, 10f) { value = settings.dragSpacing };
+            dragSpacing.RegisterValueChangedCallback(evt =>
+            {
+                Undo.RecordObject(settings, "Set Drag Spacing");
+                settings.dragSpacing = evt.newValue;
+                EditorUtility.SetDirty(settings);
+            });
+            section.Add(dragSpacing);
+
             return section;
+        }
+
+        private VisualElement BuildPresetSection()
+        {
+            Foldout foldout = new Foldout { text = "Brush Preset", value = false };
+
+            ObjectField preset = new ObjectField("Preset")
+            {
+                objectType = typeof(PrefabBrushPreset),
+                value = loadedPreset
+            };
+            preset.RegisterValueChangedCallback(evt => loadedPreset = evt.newValue as PrefabBrushPreset);
+            foldout.Add(preset);
+
+            VisualElement row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+
+            Button load = new Button(() =>
+            {
+                if (loadedPreset == null)
+                {
+                    Debug.LogWarning("[WorldBuilder] Assign a preset first.");
+                    return;
+                }
+
+                Undo.RecordObject(settings, "Load Brush Preset");
+                loadedPreset.ApplyTo(settings);
+                EditorUtility.SetDirty(settings);
+                UndoHistory.Push("Load Brush Preset");
+            }) { text = "Load" };
+            load.style.flexGrow = 1;
+            row.Add(load);
+
+            Button save = new Button(() =>
+            {
+                if (loadedPreset == null)
+                {
+                    loadedPreset = ScriptableObject.CreateInstance<PrefabBrushPreset>();
+                    string path = EditorUtility.SaveFilePanelInProject(
+                        "Save Brush Preset", "PrefabBrushPreset", "asset",
+                        "Choose where to store the brush preset.");
+                    if (string.IsNullOrEmpty(path))
+                    {
+                        UnityEngine.Object.DestroyImmediate(loadedPreset);
+                        loadedPreset = null;
+                        return;
+                    }
+
+                    AssetDatabase.CreateAsset(loadedPreset, path);
+                }
+                else
+                {
+                    Undo.RecordObject(loadedPreset, "Save Brush Preset");
+                }
+
+                loadedPreset.CaptureFrom(settings);
+                EditorUtility.SetDirty(loadedPreset);
+                AssetDatabase.SaveAssets();
+                UndoHistory.Push("Save Brush Preset");
+            }) { text = "Save To Preset" };
+            save.style.flexGrow = 1;
+            row.Add(save);
+
+            foldout.Add(row);
+            return foldout;
         }
 
         private VisualElement BuildPlacementSection()
@@ -630,6 +767,20 @@ namespace WorldBuilder.Editor.PrefabBrush
                 EditorUtility.SetDirty(settings);
             });
             section.Add(chunkSize);
+
+            ObjectField waterData = new ObjectField("Water Runtime Data")
+            {
+                objectType = typeof(WaterWorldRuntimeData),
+                value = settings.waterData
+            };
+            waterData.tooltip = "Enables the Water Depth Mask node in Modifier Graphs.";
+            waterData.RegisterValueChangedCallback(evt =>
+            {
+                Undo.RecordObject(settings, "Set Water Data");
+                settings.waterData = evt.newValue as WaterWorldRuntimeData;
+                EditorUtility.SetDirty(settings);
+            });
+            section.Add(waterData);
 
             Toggle duplicate = new Toggle("Duplicate Shared SO") { value = settings.duplicateSharedScriptableObjects };
             duplicate.RegisterValueChangedCallback(evt =>

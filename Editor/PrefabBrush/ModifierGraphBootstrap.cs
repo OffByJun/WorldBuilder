@@ -30,6 +30,10 @@ namespace WorldBuilder.Editor.PrefabBrush
             ModifierNodeRegistry.Register(new HeightMaskNode());
             ModifierNodeRegistry.Register(new SlopeMaskNode());
             ModifierNodeRegistry.Register(new BiomeMaskNode());
+            ModifierNodeRegistry.Register(new RandomMaskNode());
+            ModifierNodeRegistry.Register(new CellMaskNode());
+            ModifierNodeRegistry.Register(new BrushEdgeMaskNode());
+            ModifierNodeRegistry.Register(new WaterDepthMaskNode());
         }
     }
 }

@@ -5,7 +5,11 @@
         "WorldBuilder.Runtime",
         "WorldBuilder.Authoring",
         "WorldBuilder.Baking",
-        "WorldBuilder.Editor"
+        "WorldBuilder.Editor",
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.Jobs",
+        "Unity.Mathematics"
     ],
     "includePlatforms": [
         "Editor"

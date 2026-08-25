@@ -1,17 +1,18 @@
-{
+﻿{
   "name": "com.emiteat.worldbuilder",
   "displayName": "WorldBuilder",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "unity": "6000.4",
   "unityRelease": "2f1",
   "description": "Voxel world authoring tools for Unity 6 URP.",
   "dependencies": {
     "com.unity.entities": "6.4.0",
     "com.unity.entities.graphics": "6.4.0",
-    "com.unity.physics": "1.4.3"
+    "com.unity.physics": "1.4.3",
+    "com.unity.splines": "2.8.4"
   },
   "author": {
     "name": "emiteat"
   },
-  "_fingerprint": "94ef7697c80a6ca886c6e7d6cdc731f9d05fba0c"
+  "_fingerprint": "577352530dd43855814001e83ab9a6e5723cd36c"
 }

@@ -6,14 +6,23 @@ using WorldBuilder.Editor.ChunkGridVisualizer;
 using WorldBuilder.Editor.Export;
 using WorldBuilder.Editor.HeightBiomeMapper;
 using WorldBuilder.Editor.MeshEditing;
+using WorldBuilder.Editor.MinimapBakerTool;
+using WorldBuilder.Editor.POIPlacerTool;
 using WorldBuilder.Editor.PrefabBrush;
+using WorldBuilder.Editor.ScatterBakeTool;
+using WorldBuilder.Editor.SplinePlacementTool;
 using WorldBuilder.Editor.SpawnEditing;
 using WorldBuilder.Editor.SpawnHeatmap;
+using WorldBuilder.Editor.StreamingSimulatorTool;
+using WorldBuilder.Editor.TerrainForgeTool;
 using WorldBuilder.Editor.TerrainPainting;
+using WorldBuilder.Editor.UnderwaterVisualizerTool;
 using WorldBuilder.Editor.UndoHistoryPanel;
 using WorldBuilder.Editor.VoxelPainting;
+using WorldBuilder.Editor.WorldAuditTool;
 using WorldBuilder.Editor.WorldDataBrowserTool;
 using WorldBuilder.Editor.WorldStatisticsTool;
+using WorldBuilder.Runtime.Data;
 
 namespace WorldBuilder.Editor
 {
@@ -33,6 +42,15 @@ namespace WorldBuilder.Editor
 
             WorldBuilderToolRegistry.Register(new WorldDataBrowserTool.WorldDataBrowserTool());
             WorldBuilderToolRegistry.Register(new WorldStatisticsTool.WorldStatisticsTool());
+
+            WorldBuilderToolRegistry.Register(new MinimapBakerTool.MinimapBakerTool(biomeMap));
+            WorldBuilderToolRegistry.Register(new POIPlacerTool.POIPlacerTool());
+            WorldBuilderToolRegistry.Register(new SplinePlacementTool.SplinePlacementTool());
+            WorldBuilderToolRegistry.Register(new UnderwaterVisualizerTool.UnderwaterVisualizerTool());
+            WorldBuilderToolRegistry.Register(new ScatterBakeTool.ScatterBakeTool(prefabBrushBiomeMap));
+            WorldBuilderToolRegistry.Register(new WorldAuditTool.WorldAuditTool());
+            WorldBuilderToolRegistry.Register(new StreamingSimulatorTool.StreamingSimulatorTool());
+            WorldBuilderToolRegistry.Register(new TerrainForgeTool.TerrainForgeTool(biomeMap));
 
             WorldBuilderToolRegistry.Register(new MeshEditTool());
             WorldBuilderToolRegistry.Register(new PrefabBrushTool(prefabBrushBiomeMap));

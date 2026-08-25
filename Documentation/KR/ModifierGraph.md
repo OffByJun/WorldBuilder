@@ -270,6 +270,42 @@ public struct NoiseSettings
 | 파라미터 | `BiomeType targetBiome` |
 | 출력 | `ctx.biome == targetBiome ? 1 : 0` |
 
+### RandomMaskNode
+
+| 항목 | 값 |
+|------|----|
+| 입력 | 없음 |
+| 파라미터 | `float threshold` (0–1), `bool invert` |
+| 출력 | 배치 위치+시드 해시 값이 `threshold` 이상이면 1, 아니면 0 (결정적) |
+
+### CellMaskNode
+
+| 항목 | 값 |
+|------|----|
+| 입력 | 없음 |
+| 파라미터 | `float cellSize`, `float threshold` (0–1), `bool invert` |
+| 출력 | 월드를 `cellSize` 그리드로 나눈 뒤 셀별 해시 값으로 1/0 — 무리(cluster) 패턴 생성 |
+
+### BrushEdgeMaskNode
+
+| 항목 | 값 |
+|------|----|
+| 입력 | 없음 |
+| 파라미터 | `float edgeFalloff` (0.01–1, 반경 비율) |
+| 출력 | 브러시 중심은 1, 가장자리 `edgeFalloff` 구간에서 0으로 감쇠 |
+
+### WaterDepthMaskNode (0.3.0)
+
+| 항목 | 값 |
+|------|----|
+| 입력 | 없음 |
+| 파라미터 | `bool requireWater`, `float minDepth`, `float maxDepth`, `bool invert` |
+| 출력 | 수중이고 수심이 [min, max] 범위면 1, 아니면 0. `requireWater` 끄면 건조 지역 통과 |
+| 전제 | Prefab Brush 설정에 Water Runtime Data 에셋 지정 |
+
+> **마스크 게이팅**: 마스크 노드를 Scale 채널에 연결해 스케일이 0이 되면 해당 배치는
+> 프리뷰와 실제 배치 모두에서 자동으로 건너뛰어집니다.
+
 ---
 
 # 노드 에디터 사용법

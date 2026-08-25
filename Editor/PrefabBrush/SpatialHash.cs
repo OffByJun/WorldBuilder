@@ -55,6 +55,14 @@ namespace WorldBuilder.Editor.PrefabBrush
         public List<T> Query(Vector3 center, float radius)
         {
             List<T> result = new List<T>();
+            Query(center, radius, result);
+            return result;
+        }
+
+        /// <summary>Allocation-free variant for hot paths; clears and fills the given buffer.</summary>
+        public void Query(Vector3 center, float radius, List<T> results)
+        {
+            results.Clear();
             float sqrRadius = radius * radius;
             int range = Mathf.CeilToInt(radius / cellSize);
             Vector3Int origin = ToCell(center);
@@ -75,14 +83,12 @@ namespace WorldBuilder.Editor.PrefabBrush
                         {
                             if ((bucket[i].position - center).sqrMagnitude <= sqrRadius)
                             {
-                                result.Add(bucket[i].item);
+                                results.Add(bucket[i].item);
                             }
                         }
                     }
                 }
             }
-
-            return result;
         }
 
         private Vector3Int ToCell(Vector3 position)

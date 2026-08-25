@@ -2,6 +2,7 @@ using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
+using WorldBuilder.Runtime.Data;
 
 namespace WorldBuilder.Editor.VoxelPainting
 {

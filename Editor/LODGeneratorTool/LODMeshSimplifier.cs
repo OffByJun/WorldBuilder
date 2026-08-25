@@ -21,10 +21,12 @@ namespace WorldBuilder.Editor.LODGeneratorTool
             Vector3[] vertices = source.vertices;
             Vector3[] normals = source.normals;
             Vector2[] uv = source.uv;
+            Color[] colors = source.colors;
             int[] triangles = source.triangles;
 
             bool hasNormals = normals != null && normals.Length == vertices.Length;
             bool hasUv = uv != null && uv.Length == vertices.Length;
+            bool hasColors = colors != null && colors.Length == vertices.Length;
 
             int targetVerts = Mathf.Max(4, Mathf.RoundToInt(vertices.Length * ratio));
             int gridRes = Mathf.Max(1, Mathf.CeilToInt(Mathf.Pow(targetVerts, 1f / 3f)));
@@ -41,6 +43,7 @@ namespace WorldBuilder.Editor.LODGeneratorTool
             List<Vector3> accumPos = new List<Vector3>();
             List<Vector3> accumNormal = new List<Vector3>();
             List<Vector2> accumUv = new List<Vector2>();
+            List<Color> accumColor = new List<Color>();
             List<int> counts = new List<int>();
 
             for (int i = 0; i < vertices.Length; i++)
@@ -58,6 +61,7 @@ namespace WorldBuilder.Editor.LODGeneratorTool
                     accumPos.Add(Vector3.zero);
                     accumNormal.Add(Vector3.zero);
                     accumUv.Add(Vector2.zero);
+                    accumColor.Add(Color.clear);
                     counts.Add(0);
                 }
 
@@ -72,17 +76,24 @@ namespace WorldBuilder.Editor.LODGeneratorTool
                     accumUv[newIndex] += uv[i];
                 }
 
+                if (hasColors)
+                {
+                    accumColor[newIndex] += colors[i];
+                }
+
                 counts[newIndex]++;
                 vertexToNew[i] = newIndex;
             }
 
             Vector3[] newVertices = new Vector3[accumPos.Count];
             Vector2[] newUv = new Vector2[accumPos.Count];
+            Color[] newColors = hasColors ? new Color[accumPos.Count] : null;
             for (int i = 0; i < accumPos.Count; i++)
             {
                 float inv = counts[i] > 0 ? 1f / counts[i] : 1f;
                 newVertices[i] = accumPos[i] * inv;
                 newUv[i] = accumUv[i] * inv;
+                if (hasColors) newColors[i] = accumColor[i] * inv;
             }
 
             List<int> newTriangles = new List<int>(triangles.Length);
@@ -114,6 +125,11 @@ namespace WorldBuilder.Editor.LODGeneratorTool
             if (hasUv)
             {
                 result.SetUVs(0, newUv);
+            }
+
+            if (hasColors)
+            {
+                result.SetColors(newColors);
             }
 
             result.SetTriangles(newTriangles, 0);

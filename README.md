@@ -19,7 +19,20 @@ WorldBuilder는 Unity에서 대규모 월드를 효율적으로 제작하기 위
 * Terrain Paint
 * Voxel Paint
 * Mesh Edit
-* Prefab Brush
+* Prefab Brush (프리셋 + Water Depth Mask)
+* Spline Placement
+* Minimap Baker (레이어 합성)
+* POI Placer
+* Underwater Visualizer
+* Scatter Bake (Unity 단독 청크 베이크)
+* World Audit
+
+### 런타임 편집 (0.2.0+)
+
+* `RuntimePlacementService` — GameObject 기반 런타임 배치/제거 + JSON 저장/복원
+* `RuntimeWorldEditor` — 카메라 기반 고스트 프리뷰 에디터 컴포넌트 (배치/제거/이동)
+* `WorldEntityRuntimeEditing` — DOTS 엔티티 런타임 스폰 파사드
+* 자세한 내용은 `Documentation/KR/RuntimeEditing.md` 참조
 
 ### 환경 시스템
 
@@ -32,6 +45,15 @@ WorldBuilder는 Unity에서 대규모 월드를 효율적으로 제작하기 위
 * Toxic Zone
 * Visibility Zone
 
+### 동굴 & 수중 엔진 (0.9.0+)
+
+* 절차적 동굴 생성 — `CaveField` 스파게티 터널 + 케버턴 룸 감산 카빙 (`CaveShapeParams`)
+* 동굴 프리셋 4종 — LimestoneCaves / LavaTubes / FloodedGrotto / AbyssalNetwork
+* 환경 도메인 분류기 — OpenAir / Underwater / Underground / FloodedCave 한 번의 호출 판정
+  (`UndergroundProbe` 복셀 인클로저 레이 + `WaterQueryService` 결합)
+* 해저·동굴 바이옴 — Cave / CoralReef / KelpForest / AbyssalTrench → `BiomeType` 확장,
+  Whittaker 해저 밴드 세분화, 스플랫 기본 매핑 연동
+
 ### 게임플레이 도구
 
 * Spawn Editor
@@ -39,6 +61,11 @@ WorldBuilder는 Unity에서 대규모 월드를 효율적으로 제작하기 위
 * Creature Spawn Zone
 * Event Trigger Zone
 * Path Tool
+
+### 런타임 데이터 파이프라인 (0.4.0+)
+
+* WorldDataSnapshot 익스포트 → 런타임 로더(프리팹 바인딩)
+* RuntimePlacementService → DOTS 엔티티 스폰 브리지
 
 ### 유틸리티
 
@@ -79,9 +106,19 @@ WorldBuilder는 Unity에서 대규모 월드를 효율적으로 제작하기 위
 * Tool Reference (BuiltInTools.md — 확장 도구 포함)
 * API Reference
 
+### 지형 엔진 (0.6.0+)
+
+* 절차적 지형 생성 — 시드 fBm + 도메인 워프/리지드/테라스/아일랜드 파라미터
+* 수적 드롭렛 + 열 침식 시뮬레이션 (결정적)
+* Surface Nets 메싱 — 청크 심 자동 용접, 밀도 그래디언트 노멀
+* Whittaker 바이옴 분류 + 고해상도 스플랫 (`HighResBiomeMap`)
+* PCG 생태 규칙 엔진 — 고도/경사/바이옴 게이트 → 청크 베이크 연동
+* 런타임 굴착/파괴 — `TerrainDeformer` 즉시 재메싱
+* 워크벤치: **Terrain Forge** 도구
+
 ## 로드맵
 
-* Runtime Editing
+* ~~Runtime Editing~~ (0.2.0 기반 구현 완료)
 * 추가 편집 도구
 * 시각화 기능 개선
 * 성능 최적화
@@ -105,7 +142,25 @@ WorldBuilder is a Unity Editor extension that provides a collection of tools for
 * Terrain Paint
 * Voxel Paint
 * Mesh Editing
-* Prefab Brush
+* Prefab Brush (presets + Water Depth Mask)
+* Spline Placement
+* Minimap Baker (layer compositing)
+* POI Placer
+* Underwater Visualizer
+* Scatter Bake (Unity-only chunk baking)
+* World Audit
+
+### Runtime Editing (0.2.0+)
+
+* `RuntimePlacementService` — GameObject-based runtime placement/removal with JSON persistence
+* `RuntimeWorldEditor` — camera-driven ghost preview editor component (place/remove/move)
+* `WorldEntityRuntimeEditing` — thin DOTS entity spawn facade
+* See `Documentation/KR/RuntimeEditing.md` for details
+
+### Runtime Data Pipeline (0.4.0+)
+
+* WorldDataSnapshot export → runtime loader with prefab bindings
+* RuntimePlacementService → DOTS entity spawn bridge
 
 ### Environment
 
@@ -117,6 +172,15 @@ WorldBuilder is a Unity Editor extension that provides a collection of tools for
 * Pressure Zone
 * Toxic Zone
 * Visibility Zone
+
+### Caves & Underwater (0.9.0+)
+
+* Procedural cave carving — `CaveField` warped spaghetti tunnels + depth-biased cavern rooms (`CaveShapeParams`)
+* Four cave presets — LimestoneCaves / LavaTubes / FloodedGrotto / AbyssalNetwork
+* Environment domain classifier — one call resolves OpenAir / Underwater / Underground / FloodedCave
+  (`UndergroundProbe` voxel enclosure ray combined with `WaterQueryService`)
+* Seafloor & cave biomes — Cave / CoralReef / KelpForest / AbyssalTrench added to `BiomeType`,
+  refined Whittaker seafloor bands, splat default mapping wired up
 
 ### Gameplay Tools
 
@@ -166,7 +230,7 @@ Detailed documentation is available in the `Documentation/` directory.
 
 ## Roadmap
 
-* Runtime Editing
+* ~~Runtime Editing~~ (foundational support shipped in 0.2.0)
 * Additional Builder Tools
 * More Visualization Tools
 * Performance Improvements

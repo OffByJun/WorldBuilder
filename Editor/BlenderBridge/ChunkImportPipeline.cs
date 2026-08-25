@@ -34,26 +34,9 @@ namespace WorldBuilder.Editor.BlenderBridge
     {
         public static ChunkImportResult Import(string manifestAssetPath, BlenderBridgeSettings bridge)
         {
-            WorldBakeReport report = new WorldBakeReport();
-            if (bridge == null || bridge.WorldGrid == null)
-            {
-                report.Add(BakeIssueSeverity.Error, "WB_BRIDGE_SETTINGS", manifestAssetPath,
-                    "BlenderBridgeSettings with WorldGridSettings is required.");
-                return new ChunkImportResult(null, string.Empty, false, report);
-            }
+            WorldBakeReport report = Validate(manifestAssetPath, bridge, out ChunkManifest manifest);
+            if (report.HasErrors) return new ChunkImportResult(manifest, string.Empty, false, report);
 
-            ChunkManifest manifest;
-            try
-            {
-                manifest = ChunkManifestCodec.Parse(File.ReadAllText(ToAbsolutePath(manifestAssetPath)));
-            }
-            catch (Exception exception)
-            {
-                report.Add(BakeIssueSeverity.Error, "WB_MANIFEST_PARSE", manifestAssetPath, exception.Message);
-                return new ChunkImportResult(null, string.Empty, false, report);
-            }
-
-            report.Merge(ChunkManifestCodec.Validate(manifest, bridge.WorldGrid));
             BakeManifest bakeManifest = ChunkBakePrefabAssembler.LoadAdjacent(manifestAssetPath, manifest.worldId,
                 manifest.chunk.x, manifest.chunk.z, bridge.WorldGrid, report);
             Dictionary<string, string> contentAssets = ValidateFiles(manifestAssetPath, manifest, report);
@@ -89,6 +72,7 @@ namespace WorldBuilder.Editor.BlenderBridge
                 chunkRoot.Configure(coordinate, sourceHash, manifestAssetPath);
                 Transform generated = ChunkBakePrefabAssembler.ResetGeneratedRoot(root.transform);
                 GameObject geometry = AddModel(contentAssets, "geometry", generated, false, false, report);
+                ValidateGeometryBounds(geometry, bridge, manifestAssetPath, report);
                 GameObject collision = AddModel(contentAssets, "collision", generated, true, bakeManifest == null, report);
                 AddPlacements(placements, bridge.AssetRegistry, generated, report);
                 ChunkBakePrefabAssembler.Assemble(bakeManifest, geometry, collision, bridge.LodTransitionHeights, report);
@@ -104,6 +88,59 @@ namespace WorldBuilder.Editor.BlenderBridge
             RegionCatalogBuilder.RebuildRegion(bridge, bridge.WorldGrid.CreateGrid().ChunkToRegion(coordinate));
             AssetDatabase.SaveAssets();
             return new ChunkImportResult(manifest, prefabPath, true, report);
+        }
+
+        /// <summary>
+        /// Dry-run validation: parses and validates the manifest, content files and placements
+        /// without importing or rebuilding anything.
+        /// </summary>
+        public static WorldBakeReport Validate(string manifestAssetPath, BlenderBridgeSettings bridge,
+            out ChunkManifest manifest)
+        {
+            WorldBakeReport report = new WorldBakeReport();
+            if (bridge == null || bridge.WorldGrid == null)
+            {
+                report.Add(BakeIssueSeverity.Error, "WB_BRIDGE_SETTINGS", manifestAssetPath,
+                    "BlenderBridgeSettings with WorldGridSettings is required.");
+                manifest = null;
+                return report;
+            }
+
+            try
+            {
+                manifest = ChunkManifestCodec.Parse(File.ReadAllText(ToAbsolutePath(manifestAssetPath)));
+            }
+            catch (Exception exception)
+            {
+                report.Add(BakeIssueSeverity.Error, "WB_MANIFEST_PARSE", manifestAssetPath, exception.Message);
+                manifest = null;
+                return report;
+            }
+
+            report.Merge(ChunkManifestCodec.Validate(manifest, bridge.WorldGrid));
+            Dictionary<string, string> contentAssets = ValidateFiles(manifestAssetPath, manifest, report);
+            ChunkPlacementDocument placements = LoadPlacements(manifest, contentAssets, report);
+            if (placements != null) report.Merge(ChunkManifestCodec.ValidatePlacements(placements, manifest));
+            ValidateRegistry(placements, bridge.AssetRegistry, report);
+            report.Sort();
+            return report;
+        }
+
+        private static void ValidateGeometryBounds(GameObject geometry, BlenderBridgeSettings bridge,
+            string manifestPath, WorldBakeReport report)
+        {
+            if (geometry == null || bridge?.WorldGrid == null) return;
+            Renderer[] renderers = geometry.GetComponentsInChildren<Renderer>(false);
+            if (renderers.Length == 0) return;
+
+            Bounds bounds = renderers[0].bounds;
+            for (int i = 1; i < renderers.Length; i++) bounds.Encapsulate(renderers[i].bounds);
+
+            float chunkSize = bridge.WorldGrid.AuthoringChunkSize;
+            if (bounds.size.x > chunkSize || bounds.size.z > chunkSize)
+                report.Add(BakeIssueSeverity.Warning, "WB_IMPORT_GEOMETRY_BOUNDS", manifestPath,
+                    $"Geometry footprint {bounds.size.x:F1}x{bounds.size.z:F1} exceeds the chunk size {chunkSize:F0}; " +
+                    "verify the Blender export origin or the chunk assignment.");
         }
 
         private static Dictionary<string, string> ValidateFiles(string manifestPath, ChunkManifest manifest,

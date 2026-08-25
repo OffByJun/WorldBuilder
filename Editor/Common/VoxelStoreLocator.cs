@@ -1,5 +1,6 @@
 using UnityEditor;
 using UnityEngine;
+using WorldBuilder.Runtime.Data;
 
 namespace WorldBuilder.Editor
 {

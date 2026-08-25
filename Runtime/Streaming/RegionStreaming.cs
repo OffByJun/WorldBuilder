@@ -94,6 +94,12 @@ namespace WorldBuilder.Runtime.Streaming
             desired.Sort((left, right) => CompareByDistance(left, right, center));
             HashSet<RegionCoord> desiredSet = new HashSet<RegionCoord>(desired);
 
+            // Fast path: the requested set is already loaded exactly.
+            if (desiredSet.Count == loaded.Count && ContainsAll(desiredSet))
+            {
+                return;
+            }
+
             List<RegionCoord> unload = new List<RegionCoord>();
             foreach (RegionCoord coordinate in loaded.Keys)
                 if (!desiredSet.Contains(coordinate)) unload.Add(coordinate);
@@ -125,6 +131,15 @@ namespace WorldBuilder.Runtime.Streaming
                 await loader.UnloadAsync(loaded[coordinates[i]], cancellationToken);
             loaded.Clear();
             NotifyLoadedRegions();
+        }
+
+        private bool ContainsAll(HashSet<RegionCoord> desiredSet)
+        {
+            foreach (RegionCoord coordinate in loaded.Keys)
+            {
+                if (!desiredSet.Contains(coordinate)) return false;
+            }
+            return true;
         }
 
         private void NotifyLoadedRegions()

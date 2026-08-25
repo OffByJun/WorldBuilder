@@ -547,6 +547,125 @@ Static Editor Flags를 일괄 변경합니다.
 
 ---
 
+# Minimap Baker Tool
+
+씬을 정사영 탑다운 카메라로 캡처해 미니맵 PNG로 굽습니다.
+
+## 주요 기능
+
+- 씬 뷰 피벗 자동 중심 또는 수동 Center 지정
+- World Extent(XZ 범위), 해상도(64~8192), Far Plane 설정
+- 레이어 마스크 필터링, 투명 배경(알파) PNG 출력
+- Scene View에 베이크 영역 와이어 프리뷰 표시
+
+---
+
+# POI Placer Tool
+
+관심 지점(POI)과 루트 컨테이너를 클릭으로 배치합니다.
+
+## 주요 기능
+
+- Marker Type: POI / Loot Container, 표시 이름 지정
+- 배치 시 `WorldDataStore`에 `POIEntry`/`LootContainerEntry` 자동 등록
+- Remove 모드: 반경 3m 내 가장 가까운 마커 제거
+- 배치된 마커는 월드 데이터 브라우저에서 탐색 가능
+
+---
+
+# Spline Placement Tool (0.3.0)
+
+Unity Splines 경로를 따라 프리팹을 자동 생성합니다. 도로·강변·해안선 장식에 유용합니다.
+
+## 주요 기능
+
+- SplineContainer 지정, 간격(Spacing) 기반 슬롯 산출
+- 측면 랜덤 오프셋, 탄젠트 정렬, 랜덤 요, 스케일 범위
+- 표면 스냅(Raycast + 노멀 정렬), Y 오프셋
+- 단일 루트 아래 생성 → 일괄 Undo, Clear로 정리
+- Scene View에 스플라인 경로 프리뷰 표시
+
+---
+
+# Underwater Visualizer Tool (0.3.0)
+
+베이크된 수면 데이터(Water Runtime Data)를 편집 모드에서 시각화합니다.
+
+## 주요 기능
+
+- 지형 레이캐스트 + `WaterQueryService` 샘플링으로 해저 수심 히트 그리드(얕음→깊음 그라디언트)
+- 커서 프롬프트: 해당 지점 수심·수류 속도
+- 씬의 WaterCurrentZone 화살표를 강도 비례 크기/알파로 표시
+- 셀 크기·뷰 반경·최대 수심 스케일·레이어 마스크 조절
+
+---
+
+# Scatter Bake Tool (0.4.0)
+
+Prefab Brush로 기록한 스트로크를 Blender 없이 청크에 영구 배치합니다.
+
+## 주요 기능
+
+- 기록된 스트로크를 결정적으로 재현해 청크별로 그룹핑
+- `BlenderAssetRegistry` 역조회로 프리팹→assetId 매핑
+- placements.json 병합 저장 후 contentHash 갱신 → 표준 임포트 파이프라인 재임포트
+- 매니페스트가 없는 청크는 스킵 사유와 함께 리포트
+
+---
+
+# World Audit Tool (0.4.0)
+
+월드 데이터 전반을 원클릭 교차 점검합니다.
+
+## 주요 기능
+
+- WorldDataStore: 중복 id, NaN 위치, 빈 표시 이름
+- DirectRegionCatalog: null 프리팹, 중복 좌표
+- BlenderAssetRegistry: 빈/중복 assetId, 누락 프리팹
+- 생성된 청크 ↔ 리전 카탈로그 커버리지 검사
+- VoxelStore 빈 밀도 버퍼 점검
+- 결과 리스트 표시 + CSV 내보내기
+
+---
+
+# Streaming Simulator Tool (0.5.0)
+
+플레이 모드 진입 없이 RegionStreaming을 미리 봅니다.
+
+## 주요 기능
+
+- 씬 뷰 카메라(또는 수동 Refocus)를 포커스로 ChunkStreamingService 구동
+- 리전 반경 슬라이더, DirectReferenceRegionLoader로 실제 청크 프리팹 인스턴스화
+- 생성 인스턴스는 `__WB_StreamingPreview` 루트에 수집, Unload All로 정리
+
+---
+
+# Terrain Forge Tool (0.6.0)
+
+절차적 지형 코어 워크벤치입니다.
+
+## 주요 기능
+
+- **Shape**: 시드 기반 fBm(도메인 워프·리지드·테라스·아일랜드 감쇠)으로 리전 하이트맵 생성
+- **Erode**: 수적 드롭렛 + 열 침식 시뮬레이션(결정적)
+- **Write**: 침식된 하이트맵을 VoxelStore 밀도로 변환 — 스컬프트/익스포트/런타임과 동일 데이터
+- **Bake Meshes**: Surface Nets 메셔로 청크 심이 용접된 메시 애셋 출력
+- **Biomes**: 고도×온도×습도 Whittaker 분류 → 고해상도 바이옴 스플랫
+- **Ecology**: 규칙(고도/경사/바이옴/노이즈) 기반 PCG 스캐터 → Scatter Bake 파이프라인으로 청크 베이크
+
+### 런타임 지형 변형
+
+* `TerrainDeformer.Modify` — 구면 굴착/축조 후 영향 청크 자동 재메싱(`TerrainChunkRenderer` 레지스트리)
+* Valheim식 파괴/건설 게임플레이의 기반
+
+### 비주얼 파이프라인 (0.8.0)
+
+* **스플랫맵**: 바이옴→4레이어 매핑으로 청크 컨트롤 텍스처 생성, `WorldBuilder/TerrainSplat` URP 셰이더가 4종 텍스처를 블렌딩. 버텍스 컬러 G 채널이 낮은 곳(침식 지역)은 자동으로 암석 노출
+* **LOD 체인**: LOD1/LOD2 메시 자동 생성 + `LODGroup` 구성, 버텍스 컬러 보존
+* **침식 맵**: 침식(R)/퇴적(G) 강도 PNG 출력 — 스플랫 가중치나 생태 규칙 입력으로 재사용 가능
+
+---
+
 # Summary
 
 현재 WorldBuilder에는 다음 카테고리의 Tool이 포함되어 있습니다.
@@ -572,3 +691,4 @@ Static Editor Flags를 일괄 변경합니다.
 | 협업 | Scene Changes, Object Owner |
 | 물리 | Rigidbody Batch, Collider Fitter |
 | LOD/Transform | LOD Generator, Lighting Preset, Static Flag, Object Snap, Transform Batch, Terrain Sculpt |
+| 월드 | Terrain Forge, Minimap Baker, POI Placer, Spline Placement, Underwater Visualizer, Scatter Bake, World Audit, Streaming Simulator |
