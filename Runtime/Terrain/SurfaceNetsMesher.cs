@@ -26,6 +26,9 @@ namespace WorldBuilder.Runtime.Terrain
             resolution = store.Resolution;
         }
 
+        /// <summary>Voxels per chunk axis — spacing between lattice samples.</summary>
+        public int SamplePointResolution => resolution;
+
         public float Sample(float x, float y, float z)
         {
             float fx = x / chunkSize * resolution - 0.5f;

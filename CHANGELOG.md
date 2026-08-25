@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.12.0 — Authoring Batch 2
+
+### PCG
+
+* **볼륨 스캐터 엔진** — `VoxelVolumeScatter` + `IVolumeQuery`/`VoxelVolumeQuery`:
+  지표가 아닌 동굴 내부 바닥을 실제로 걸어 내려가 배치하는 절차적 스폰(광맥·형광 이끼· stalagmite).
+  바이옴 게이트·바닥 법선 경사 게이트·성장단계 프리팹 지원
+* `ScatterRuleSetFactory` — CoralReef / KelpForest / CaveInterior 원클릭 규칙 세트
+  (수심 밴드·유속 상한이 올바르게 세팅된 상태로 생성)
+* 스캐터 규칙에 **성장 단계(growth stages)** 추가 — 리스폰 시 새싹→성체 프리팹 순환
+
+### 저작 도구
+
+* **메시→복셀 카빙** — `MeshCarver.CarveAlongSurface` + `WorldBuilder/Caves/Carve Store With
+  Selected Mesh` 메뉴: Blender Cave Network Builder 산출물을 선택해 복셀 스토어에 그대로 파기,
+  등록된 청크는 즉시 리메시
+* `SeasonPalette` — 바이옴×계절 컬러 팔레트 SO + 연속 계절 블렌딩 샘플러(순환 지원)
+* `MinimapDepthBaker` — 복셀에서 직접 만드는 수심 그라디언트 맵 + 밀폐 동굴 오버레이 레이어
+* `CreatureWaypointPath` — Catmull-Rom 폐쇄 순찰 경로(거리 기반 평가, 정지 시간, 속도 배수) +
+  씬 뷰 시각화 에디터
+* `StreamingBudgetPreset`/`StreamingBudgetDriver` — Handheld/Desktop/Server 예산 프리셋을
+  ChunkStreamingService에 주기 적용
+
+### 렌더링/분위기
+
+* **`WaterSurface` URP 셰이더** — 3방향 사인파 정점 변위 + 해석적 노멀, 프레넬 하이라이트,
+  파고 기반 폼. 깊이 색 혼합 프리미티브 포함
+* `EnvironmentFxRig` — 환경 도메인(OpenAir/Underwater/Underground/FloodedCave)에 따라 포그·
+  앰비언트·일광 강도를 부드럽게 전환(RP 비의존)
+
+### 테스트
+
+* 볼륨 스캐터 바닥 배치·결정론, 팩토리 게이트, 메시 튜브 관통, 계절 블렌딩/랩, 경로 길이·연속성·
+  랩어라운드 테스트 6건 추가
+
 ## 0.11.0 — World Flow & Authoring Batch 1
 
 ### 지형 저작

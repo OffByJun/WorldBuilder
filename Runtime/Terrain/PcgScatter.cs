@@ -43,6 +43,10 @@ namespace WorldBuilder.Runtime.Terrain
             [Range(0f, 1f)] public float noiseThreshold = 0.45f;
             public bool alignToNormal = true;
             public Vector2 scaleRange = new Vector2(1f, 1f);
+
+            [Header("Growth Stages")]
+            [Tooltip("Optional respawn stages (sprout → mature). When set, one entry replaces prefabs per placement.")]
+            public List<GameObject> growthStages = new List<GameObject>();
         }
 
         public List<Rule> rules = new List<Rule>();
@@ -131,6 +135,11 @@ namespace WorldBuilder.Runtime.Terrain
 
                         GameObject prefab = rule.prefabs[random.NextInt(0, rule.prefabs.Count)];
                         if (prefab == null) continue;
+                        if (rule.growthStages != null && rule.growthStages.Count > 0)
+                        {
+                            GameObject staged = rule.growthStages[random.NextInt(0, rule.growthStages.Count)];
+                            if (staged != null) prefab = staged;
+                        }
 
                         float scale = Mathf.Lerp(rule.scaleRange.x, rule.scaleRange.y, random.NextFloat());
                         Quaternion rotation = Quaternion.Euler(0f, random.NextFloat() * 360f, 0f);
@@ -180,6 +189,161 @@ namespace WorldBuilder.Runtime.Terrain
             float hu = query.TryHeight(xz + new Vector2(0f, delta), out float u) ? u : hd;
             Vector3 normal = new Vector3(hl - hr, 2f * delta, hd - hu);
             return normal.normalized;
+        }
+    }
+
+    /// <summary>
+    /// Interior-capable terrain probe: finds walkable floors INSIDE a volume (cave
+    /// caverns, grottos), unlike the top-down <see cref="ITerrainQuery"/>.
+    /// </summary>
+    public interface IVolumeQuery
+    {
+        /// <summary>
+        /// Marches down from the candidate until it enters open air and then lands on
+        /// solid ground. Returns false when the column never reaches a cavity floor.
+        /// </summary>
+        bool TryFloor(Vector3 candidateTop, float maxDepth, out Vector3 floorPoint, out Vector3 normal);
+
+        BiomeType BiomeAt(Vector3 position);
+    }
+
+    public static class VoxelVolumeScatter
+    {
+        /// <summary>
+        /// Deterministic placements on cavity floors inside the volume — ore veins, glow
+        /// moss and bat roosts inside carved caves. Same rule semantics as the surface
+        /// engine (biome gate, slope via floor normal, density cells, growth stages).
+        /// </summary>
+        public static List<PcgPlacement> Generate(ScatterRuleSet ruleSet, IVolumeQuery query,
+            Bounds volume, int seed)
+        {
+            if (ruleSet == null) throw new ArgumentNullException(nameof(ruleSet));
+            if (query == null) throw new ArgumentNullException(nameof(query));
+
+            var results = new List<PcgPlacement>();
+
+            for (int r = 0; r < ruleSet.rules.Count; r++)
+            {
+                ScatterRuleSet.Rule rule = ruleSet.rules[r];
+                if (rule == null || (rule.prefabs == null || rule.prefabs.Count == 0) &&
+                    (rule.growthStages == null || rule.growthStages.Count == 0)) continue;
+                if (rule.densityPerSquareMeter <= 0f) continue;
+
+                float cellSize = Mathf.Sqrt(1f / rule.densityPerSquareMeter);
+                int cellsX = Mathf.Max(1, Mathf.CeilToInt(volume.size.x / cellSize));
+                int cellsZ = Mathf.Max(1, Mathf.CeilToInt(volume.size.z / cellSize));
+
+                for (int cz = 0; cz < cellsZ; cz++)
+                {
+                    for (int cx = 0; cx < cellsX; cx++)
+                    {
+                        var random = new Unity.Mathematics.Random(
+                            (uint)(seed ^ (r * 73856093) ^ (cx * 19349663) ^ (cz * 83492791)));
+                        float acceptProbability =
+                            Mathf.Clamp01(rule.densityPerSquareMeter * cellSize * cellSize);
+                        if (random.NextFloat() >= acceptProbability) continue;
+
+                        float px = volume.min.x + (cx + random.NextFloat()) * cellSize;
+                        float pz = volume.min.z + (cz + random.NextFloat()) * cellSize;
+                        float topY = volume.max.y - random.NextFloat() * volume.size.y * 0.25f;
+
+                        const float maxFloorDepth = 512f;
+                        if (!query.TryFloor(new Vector3(px, topY, pz), maxFloorDepth,
+                                out Vector3 floor, out Vector3 normal)) continue;
+                        if (floor.y < volume.min.y) continue;
+
+                        BiomeType biome = query.BiomeAt(floor);
+                        if (!rule.anyBiome && biome != rule.biome) continue;
+                        if (Vector3.Dot(normal, Vector3.up) <
+                            Mathf.Cos(rule.maxSlopeDegrees * Mathf.Deg2Rad)) continue;
+
+                        GameObject prefab = random.NextInt(0, 2) == 0 &&
+                                            rule.prefabs != null && rule.prefabs.Count > 0
+                            ? rule.prefabs[random.NextInt(0, rule.prefabs.Count)]
+                            : null;
+                        if (rule.growthStages != null && rule.growthStages.Count > 0)
+                            prefab = rule.growthStages[random.NextInt(0, rule.growthStages.Count)] ?? prefab;
+                        if (prefab == null) continue;
+
+                        Quaternion rotation = Quaternion.Euler(0f, random.NextFloat() * 360f, 0f);
+                        if (rule.alignToNormal && normal.sqrMagnitude > 1e-5f)
+                            rotation = Quaternion.FromToRotation(Vector3.up, normal) * rotation;
+
+                        results.Add(new PcgPlacement
+                        {
+                            Prefab = prefab,
+                            Position = floor,
+                            Rotation = rotation,
+                            Scale = Vector3.one *
+                                    Mathf.Lerp(rule.scaleRange.x, rule.scaleRange.y, random.NextFloat()),
+                            Biome = biome
+                        });
+                    }
+                }
+            }
+            return results;
+        }
+    }
+
+    /// <summary>Voxel-density implementation of <see cref="IVolumeQuery"/>.</summary>
+    public sealed class VoxelVolumeQuery : IVolumeQuery
+    {
+        private readonly VoxelWorldSampler sampler;
+        private readonly HighResBiomeMap biomes;
+        private readonly float chunkSize;
+
+        public VoxelVolumeQuery(VoxelWorldSampler sampler, float chunkSize, HighResBiomeMap biomes = null)
+        {
+            this.sampler = sampler ?? throw new ArgumentNullException(nameof(sampler));
+            this.chunkSize = chunkSize;
+            this.biomes = biomes;
+        }
+
+        public bool TryFloor(Vector3 candidateTop, float maxDepth, out Vector3 floorPoint,
+            out Vector3 normal)
+        {
+            normal = Vector3.up;
+            floorPoint = default;
+            float spacing = chunkSize / sampler.SamplePointResolution;
+
+            bool inAir = false;
+            float previousY = candidateTop.y;
+            for (float y = candidateTop.y - spacing; y >= candidateTop.y - maxDepth; y -= spacing)
+            {
+                float density = sampler.Sample(candidateTop.x, y, candidateTop.z);
+                if (!inAir)
+                {
+                    if (density < SurfaceNetsMesher.IsoLevel) inAir = true; // entered a cavity
+                }
+                else if (density >= SurfaceNetsMesher.IsoLevel)
+                {
+                    // Land on the last AIR sample so placed objects sit on the floor,
+                    // not half-buried in the transition band.
+                    floorPoint = new Vector3(candidateTop.x, previousY, candidateTop.z);
+                    normal = DensityGradient(new Vector3(candidateTop.x, y, candidateTop.z));
+                    return true;
+                }
+                previousY = y;
+            }
+            return false;
+        }
+
+        public BiomeType BiomeAt(Vector3 position) =>
+            biomes != null
+                ? biomes.SampleBiome(position.x, position.z, chunkSize)
+                : BiomeType.Forest;
+
+        private Vector3 DensityGradient(Vector3 position)
+        {
+            const float epsilon = 0.35f;
+            float dx = sampler.Sample(position.x + epsilon, position.y, position.z) -
+                       sampler.Sample(position.x - epsilon, position.y, position.z);
+            float dy = sampler.Sample(position.x, position.y + epsilon, position.z) -
+                       sampler.Sample(position.x, position.y - epsilon, position.z);
+            float dz = sampler.Sample(position.x, position.y, position.z + epsilon) -
+                       sampler.Sample(position.x, position.y, position.z - epsilon);
+            Vector3 gradient = new Vector3(dx, dy, dz);
+            return gradient.sqrMagnitude > 1e-10f ? (-gradient).normalized : Vector3.up;
         }
     }
 }
