@@ -54,6 +54,24 @@ WorldBuilder는 Unity에서 대규모 월드를 효율적으로 제작하기 위
 * 해저·동굴 바이옴 — Cave / CoralReef / KelpForest / AbyssalTrench → `BiomeType` 확장,
   Whittaker 해저 밴드 세분화, 스플랫 기본 매핑 연동
 
+### 물 흐름 시스템 (0.10.0+)
+
+* 바다 기본 해류 + `WaterCurrentZone` 흐름 오버라이드 존(폭포·소용돌이·강 하구)
+* `WaterDrifter` 표류 시스템 — 부력 스프링, 흐름 가속, 침하 모드 (`WaterDrift.Integrate`)
+* 지하수대 — `GroundwaterService`가 waterTableY 아래를 정수 처리 → 밀폐 동굴 자동 FloodedCave
+* 날씨→수위 — `WaterLevelDriver`: 가뭄~홍수 강도 → 해수면 오프셋 + 유속 배수
+
+### 저작 & 생태 배치 (0.11.0+)
+
+* `RiverbedCarver` 강 하상 절삭 / `CaveField.CarveEntrances` 동굴 입구 자동 관통
+* 메시→복셀 카빙 — Blender Cave Network를 스토어에 그대로 파기 (`WorldBuilder/Caves` 메뉴)
+* 볼륨 스캐터 — 동굴 내부 바닥 배치(`VoxelVolumeScatter`) + Coral/Kelp/Cave 생태 프리셋 팩토리
+* 수중 게이트 — 스캐터 규칙의 수심 밴드·유속 상한, 성장 단계(growth stages) 프리팹
+* 계절 팔레트 `SeasonPalette`, 순찰 경로 `CreatureWaypointPath`, 미니맵 수심/동굴 레이어
+* 통합 세이브 v2 — `WorldSaveService.SaveSnapshot`(배치+지형+extras), Terrain Audit 규칙 3종
+* `WaterSurface` URP 셰이더(파도 변위·폼), `EnvironmentFxRig` 도메인별 대기 전환,
+  `StreamingBudgetPreset` 스트리밍 예산
+
 ### 게임플레이 도구
 
 * Spawn Editor
@@ -181,6 +199,20 @@ WorldBuilder is a Unity Editor extension that provides a collection of tools for
   (`UndergroundProbe` voxel enclosure ray combined with `WaterQueryService`)
 * Seafloor & cave biomes — Cave / CoralReef / KelpForest / AbyssalTrench added to `BiomeType`,
   refined Whittaker seafloor bands, splat default mapping wired up
+
+### Water Flow (0.10.0+)
+
+* Ocean base currents + `WaterCurrentZone` flow-override volumes (waterfalls, whirlpools, river mouths)
+* `WaterDrifter` buoyancy/drift system — float-line spring, flow acceleration, sink mode
+* Groundwater table — `GroundwaterService` floods everything below waterTableY; sealed caves classify as FloodedCave automatically
+* Weather→water coupling — `WaterLevelDriver` maps drought/flood intensity to sea level offset + flow speed multiplier
+
+### Authoring & Ecology Batches (0.11.0+/0.12.0+)
+
+* Riverbed carving, automatic cave entrance shafts, mesh→voxel carving import (`WorldBuilder/Caves`)
+* Volume scatter for cave interiors + Coral/Kelp/Cave ecology rule factories with underwater depth/flow gates and growth stages
+* Season palette, creature patrol paths, minimap depth/cave layers, unified snapshot saves, terrain audit rules
+* `WaterSurface` URP wave shader, domain-driven atmosphere rig, streaming budget presets
 
 ### Gameplay Tools
 
