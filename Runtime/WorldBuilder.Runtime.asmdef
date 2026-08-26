@@ -6,7 +6,8 @@
         "Unity.Collections",
         "Unity.Jobs",
         "Unity.Mathematics",
-        "Unity.RenderPipelines.Core.Runtime"
+        "Unity.RenderPipelines.Core.Runtime",
+        "UnityEngine.UI"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
@@ -30,6 +31,11 @@
             "name": "com.unity.render-pipelines.core",
             "expression": "1.0",
             "define": "WB_CORE_RP"
+        },
+        {
+            "name": "com.unity.ugui",
+            "expression": "1.0",
+            "define": "WB_UGUI"
         }
     ],
     "noEngineReferences": false

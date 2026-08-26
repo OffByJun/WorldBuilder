@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.16.0 — Gameplay Interaction Batch
+
+### 낚시
+
+* `FishingSpot` — 베이크된 물 쿼리로 수역 검증, 깊이 밴드 게이트가 있는 가중 어종 테이블,
+  입질 지연/릴 윈도우 파라미터
+* `FishingSession` — 결정론 상태 머신(대기→입질→릴 성공/도주). 입질 시점에 어종 선롤 →
+  릴 윈도우 안의 입력만 보상. 입력 UI는 게임 코드에서 Tick/TryReel로 구동
+
+### 수중 생존
+
+* `WaterBreather` — 도메인 기반 공기 게이지(잠수 시 감소, 수면 회춘), 익사 시작/종료/틱 이벤트
+  (HP는 게임 코드 소유), 공기 부족 시 `WaterDrifter` 부양 스위치 온 패닉 스윔 어시스트
+
+### 저장 UI
+
+* **uGUI 세이브 메뉴 샘플** — `SaveMenuUIBuilder.Build(parent, service)`: 슬롯 목록+저장/불러오기/
+  삭제 버튼을 코드로 조립(`WB_UGUI` 버전 디파인 가드 — uGUI 없는 프로젝트 컴파일 유지)
+
+### 스트리밍 파이프라인
+
+* **Addressables 리전 자동화** — `Assets/WorldBuilderGenerated/Regions/R_*` 폴더를 리전당 그룹으로
+  묶어 주소 부여 + 콘텐츠 빌드 메뉴 두 개(`WB_ADDRESSABLES_EDITOR` 가드, 빌드 API는 리플렉션으로
+  버전 무관 동작)
+
+### 테스트
+
+* 입질→릴 포획, 미릴 도주, 심수 종 게이트, 공기 감소/회춘, 아가미 무익사 테스트 추가
+
 ## 0.15.0 — Living World
 
 ### 낮밤·날씨
