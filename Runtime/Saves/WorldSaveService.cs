@@ -81,10 +81,16 @@ namespace WorldBuilder.Runtime.Saves
 
         public static bool Delete(string slot)
         {
-            string path = PathFor(slot);
-            if (!File.Exists(path)) return false;
-            File.Delete(path);
-            return true;
+            bool deleted = false;
+            string main = PathFor(slot);
+            if (File.Exists(main)) { File.Delete(main); deleted = true; }
+
+            foreach (string suffix in new[] { "_terrain", "_extras" })
+            {
+                string sidecar = Path.Combine(Directory, Sanitize(slot) + suffix + ".json");
+                if (File.Exists(sidecar)) { File.Delete(sidecar); deleted = true; }
+            }
+            return deleted;
         }
 
         public static List<SaveInfo> List()

@@ -537,3 +537,68 @@ Vector3 scale = ModifierGraphEvaluator.EvaluateScale(graph, ctx);
 - [Prefab Brush Pro++](PrefabBrush.md)
 - [Modifier Graph](ModifierGraph.md)
 - [Architecture](Architecture.md)
+
+
+---
+
+# Water Flow & Ecology API (0.9 ~ 0.13)
+
+## 환경 판정
+
+```csharp
+IWaterQueryService water = new WaterQueryService(waterData);          // 또는 GroundwaterService
+var sampler = new VoxelWorldSampler(store, chunkSize);
+EnvironmentDomain domain = EnvironmentClassifier.Classify(water, sampler, position);
+// OpenAir / Underwater / Underground / FloodedCave
+```
+
+## 물 흐름
+
+```csharp
+// 표류 (Rigidbody 모드)
+drifter.QueryService = water;
+drifter.Parameters.FloatOnSurface = true;
+
+// 순수 수학 재사용
+Vector3 vel = WaterDrift.Integrate(pos, vel, sample, DriftParams.Default, dt);
+Vector3 force = WaterDrift.ComputeSteeringForce(body.linearVelocity, targetVel, body.mass, dt);
+
+// 날씨 → 수위
+waterLevelDriver.SetIntensity(1f);   // 0 가뭄 ~ 1 홍수
+```
+
+## 동굴
+
+```csharp
+int carved = CaveField.Carve(store, heights, shape, caves, chunkSize);
+CaveField.CarveEntrances(store, heights, shape, caves, chunkSize, count: 6);
+StabilityReport report = CaveStabilityAnalyzer.FindDetachedSolid(store, chunkSize);
+```
+
+## 생태 배치
+
+```csharp
+// 지표
+List<PcgPlacement> surface = PcgScatterEngine.Generate(ruleSet, terrainQuery, boundsXz, seed);
+
+// 동굴 바닥 / 수중 공동
+var volumeQuery = new VoxelVolumeQuery(sampler, chunkSize, biomeMap);
+List<PcgPlacement> floors = VoxelVolumeScatter.Generate(ruleSet, volumeQuery, volumeBounds, seed);
+List<PcgPlacement> swimmers = VoxelVolumeScatter.GenerateMidWater(ruleSet, volumeQuery, volumeBounds, seed);
+```
+
+## 저장·공유·검증
+
+```csharp
+WorldSaveService.SaveSnapshot(slot, store, TerrainDeformer.EditedChunks, placementsJson, extrasJson);
+
+string seedJson = WorldSeedCodec.Export(shapeParams, caveParams);      // 월드 시드 공유
+bool ok = WorldSeedCodec.TryImport(seedJson, shapeParams, caveParams, out string error);
+
+Color32[] map = WorldMapBaker.BakeOverview(store, chunkSize, biomeMap, origin, px, sizeMeters, seaLevel);
+
+// 네트워크 편집 델타
+string packet = TerrainEditCodec.ToJson(commands);
+if (TerrainEditCodec.TryParse(packet, out var cmds, out _))
+    TerrainEditCodec.Replay(store, chunkSize, cmds);
+```

@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.14.0 — Visuals, Tools & Pipeline Batch
+
+### 렌더링
+
+* **URP Volume FX** — EnvironmentFxRig에 도메인별 `VolumeProfile` 스왑 추가
+  (`WB_CORE_RP` 버전 디파인 가드, Core RP 어셈블리 참조)
+* **트라이플래너 스플랫** — TerrainSplat 셰이더가 경사면에서 월드스페이스 삼면 매핑으로
+  전환(슬라이더 조절) — 절벽 텍스처 스트레칭 제거
+* **물 상호작용 이펙트** — `WaterSplashFx`: 진입/이탈 시 파티클 스플래시 + 절차적 링 립플
+* **동굴 발광 자동화** — *WorldBuilder/Caves/Place Glow Lights*: 공동 중앙에 웜/쿨 PointLight 자동 배치
+
+### 저작 도구
+
+* **월드맵 생성기** — `WorldMapBaker` + 수심·바이옴·동굴 오버레이 합성 전략지도 PNG 익스포트 메뉴
+* **월드 시드 공유 포맷** — `WorldSeedCodec`(Export/Import/Fingerprint) + wbseed 파일 메뉴:
+  시드 파일만 주고받아 동일 월드 재현
+* **생태 브러시** — `EcologyBrushTool`: 씬에서 Ctrl+드래그로 규칙 게이트를 통과한 배치를 직접 칠하고 청크에 베이크
+* **세이브 UI 퍼사드** — `SaveSlotMenuService`: UI 비의존 세이브 메뉴 로직(목록/저장/복원/삭제)
+
+### 파이프라인
+
+* **성능 벤치마크** — *WorldBuilder/Audit/Run Performance Benchmark*: 메싱/수질 쿼리(직렬 vs Burst)/
+  카빙 처리량 리포트
+* **편집 델타 포맷** — `TerrainEditCodec`: 명령 패킷 JSON + FNV 체크섬 + `Replay`
+  (멀티플레이 지형 동기화 기반)
+
+### 문서
+
+* ScriptingAPI.md에 0.9~0.13 신규 API 섹션 추가
+
+### 테스트
+
+* 편집 패킷 왕복·체크섬 변조 거부·재생 카빙 테스트 추가
+
 ## 0.13.0 — Simulation Batch
 
 ### 물리/시뮬레이션

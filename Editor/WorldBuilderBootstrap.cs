@@ -51,6 +51,7 @@ namespace WorldBuilder.Editor
             WorldBuilderToolRegistry.Register(new WorldAuditTool.WorldAuditTool());
             WorldBuilderToolRegistry.Register(new StreamingSimulatorTool.StreamingSimulatorTool());
             WorldBuilderToolRegistry.Register(new TerrainForgeTool.TerrainForgeTool(biomeMap));
+            WorldBuilderToolRegistry.Register(new EcologyBrush.EcologyBrushTool());
 
             WorldBuilderToolRegistry.Register(new MeshEditTool());
             WorldBuilderToolRegistry.Register(new PrefabBrushTool(prefabBrushBiomeMap));
