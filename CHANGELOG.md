@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.15.0 — Living World
+
+### 낮밤·날씨
+
+* `DayNightAtmosphere` — WorldClock의 고도 곡선을 따라 태양 색 그라디언트(일출~정오~일몰) 적용,
+  밤에는 포그/앰비언트를 한랭 틴트로 승수(다른 시스템이 쓴 절대색을 보존하며 합성),
+  SeasonPalette로 계절 온기/한기 편차까지 반영
+* SimpleWeatherController에 **Rain 상태** 추가(전용 프로필, 자동 전환 후보에 합류)
+
+### 강수 → 물 루프
+
+* `PrecipitationFx` — Rain/Overcast에서 파티클 강수(프리팹 또는 절차적 폴백 빗줄기), 지형 젖음
+  글로벌 채널 `_WB_Wetness` 구동, `WaterLevelDriver`에 폭풍 강도 자동 주입 —
+  **비 → 젖은 지형 + 강 불어남**이 하나의 컴포넌트로 닫힘
+* TerrainSplat 셰이더가 `_WB_Wetness`를 소비해 알베도 감쇠 + 스무스니스 상승
+
+### 성장·채집
+
+* `GrowableResource` — 단계별 비주얼 스왑, 시간 기반 성장(Growth01 노출, 카메라 가시성 게이트)
+* `HarvestableNode` — 수확 가능 성숙 판정, 아이템 롤(min/max), 수확 후 0단계 리스폰 또는 파괴,
+  형제 GrowableResource 지연 바인딩
+
+### 저장
+
+* `AutoSaveService` — 링 회전 autosave_NN 슬롯(보관 수 상한, 종료 시 저장 옵션) on SaveSlotMenuService
+
+### 테스트
+
+* 성장 단계 진행, 성숙 게이트+롤 범위+리스폰, 파괴 모드 테스트 3건 추가
+
 ## 0.14.0 — Visuals, Tools & Pipeline Batch
 
 ### 렌더링

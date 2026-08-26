@@ -7,7 +7,8 @@ namespace WorldBuilder.Runtime.WorldTime
     {
         Clear,
         Overcast,
-        Fog
+        Fog,
+        Rain
     }
 
     /// <summary>
@@ -35,6 +36,10 @@ namespace WorldBuilder.Runtime.WorldTime
             new WeatherProfile { state = WeatherState.Overcast, fogDensity = 0.008f, transitionSeconds = 5f };
         [SerializeField] private WeatherProfile fog =
             new WeatherProfile { state = WeatherState.Fog, fogDensity = 0.035f, transitionSeconds = 8f };
+        [SerializeField] private WeatherProfile rain =
+            new WeatherProfile { state = WeatherState.Rain,
+                fogColor = new Color(0.45f, 0.52f, 0.58f), ambientColor = new Color(0.45f, 0.5f, 0.6f),
+                ambientIntensity = 0.75f, fogDensity = 0.012f, transitionSeconds = 6f };
 
         [SerializeField] private bool randomizePeriodically = true;
         [SerializeField] private float minStateSeconds = 90f;
@@ -94,12 +99,13 @@ namespace WorldBuilder.Runtime.WorldTime
             if (clear != null && clear.state == state) return clear;
             if (overcast != null && overcast.state == state) return overcast;
             if (fog != null && fog.state == state) return fog;
+            if (rain != null && rain.state == state) return rain;
             return null;
         }
 
         private WeatherProfile PickDifferent()
         {
-            WeatherProfile[] candidates = { clear, overcast, fog };
+            WeatherProfile[] candidates = { clear, overcast, fog, rain };
             WeatherProfile pick = current;
             for (int attempt = 0; attempt < 4 && pick == current; attempt++)
                 pick = candidates[UnityEngine.Random.Range(0, candidates.Length)];
