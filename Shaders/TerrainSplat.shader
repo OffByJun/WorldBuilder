@@ -9,6 +9,7 @@ Shader "WorldBuilder/TerrainSplat"
         _Splat3 ("Layer 3 (Seabed)", 2D) = "black" {}
         _NormalScale ("Texture Tiling", Float) = 0.25
         _Smoothness ("Smoothness", Range(0,1)) = 0.05
+        _Triplanar ("Steep Triplanar Blend", Range(0,1)) = 0.8
     }
 
     SubShader
@@ -52,7 +53,24 @@ Shader "WorldBuilder/TerrainSplat"
             float4 _Control_ST;
             float _NormalScale;
             float _Smoothness;
+            float _Triplanar;
         CBUFFER_END
+
+        half3 SampleTriplanar(TEXTURE2D_PARAM(textureHandle, textureSampler),
+            float3 positionWS, float3 normalWS, float tiling)
+        {
+            float3 absN = abs(normalize(normalWS));
+            half3 w = pow(absN, 4.0);
+            w /= max(w.x + w.y + w.z, 1e-4);
+
+            half2 uvX = positionWS.zy * tiling;
+            half2 uvY = positionWS.xz * tiling;
+            half2 uvZ = positionWS.xy * tiling;
+
+            return SAMPLE_TEXTURE2D(textureHandle, textureSampler, uvX).rgb * w.x +
+                   SAMPLE_TEXTURE2D(textureHandle, textureSampler, uvY).rgb * w.y +
+                   SAMPLE_TEXTURE2D(textureHandle, textureSampler, uvZ).rgb * w.z;
+        }
 
         Varyings vert(Attributes IN)
         {
@@ -75,13 +93,21 @@ Shader "WorldBuilder/TerrainSplat"
             half total = weights.r + weights.g + weights.b + weights.a;
             weights /= max(total, 1e-4);
 
-            half4 c0 = SAMPLE_TEXTURE2D(_Splat0, sampler_Splat0, IN.uvDetail);
-            half4 c1 = SAMPLE_TEXTURE2D(_Splat1, sampler_Splat1, IN.uvDetail);
-            half4 c2 = SAMPLE_TEXTURE2D(_Splat2, sampler_Splat2, IN.uvDetail);
-            half4 c3 = SAMPLE_TEXTURE2D(_Splat3, sampler_Splat3, IN.uvDetail);
+            float3 normalWSn = normalize(IN.normalWS);
+            float steep = 1.0 - saturate(abs(normalWSn).y);          // 0 flat · 1 vertical
+            half triBlend = saturate(steep * 1.6) * saturate(_Triplanar);
 
-            half3 albedo = c0.rgb * weights.r + c1.rgb * weights.g +
-                           c2.rgb * weights.b + c3.rgb * weights.a;
+            half3 c0 = lerp(SAMPLE_TEXTURE2D(_Splat0, sampler_Splat0, IN.uvDetail).rgb,
+                SampleTriplanar(TEXTURE2D_ARGS(_Splat0, sampler_Splat0), IN.positionWS, normalWSn, _NormalScale), triBlend);
+            half3 c1 = lerp(SAMPLE_TEXTURE2D(_Splat1, sampler_Splat1, IN.uvDetail).rgb,
+                SampleTriplanar(TEXTURE2D_ARGS(_Splat1, sampler_Splat1), IN.positionWS, normalWSn, _NormalScale), triBlend);
+            half3 c2 = lerp(SAMPLE_TEXTURE2D(_Splat2, sampler_Splat2, IN.uvDetail).rgb,
+                SampleTriplanar(TEXTURE2D_ARGS(_Splat2, sampler_Splat2), IN.positionWS, normalWSn, _NormalScale), triBlend);
+            half3 c3 = lerp(SAMPLE_TEXTURE2D(_Splat3, sampler_Splat3, IN.uvDetail).rgb,
+                SampleTriplanar(TEXTURE2D_ARGS(_Splat3, sampler_Splat3), IN.positionWS, normalWSn, _NormalScale), triBlend);
+
+            half3 albedo = c0 * weights.r + c1 * weights.g +
+                           c2 * weights.b + c3 * weights.a;
 
             // Eroded areas (low vertex-color green channel) expose rock automatically.
             half rockBlend = saturate(1.0 - IN.color.g);

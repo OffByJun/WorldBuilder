@@ -29,6 +29,11 @@ namespace WorldBuilder.Runtime.Atmosphere
 
             [Tooltip("Optional: mixer snapshot switched to while this domain is active (underwater muffle, cave reverb…).")]
             public AudioMixerSnapshot mixerSnapshot;
+
+#if WB_CORE_RP
+            [Tooltip("Optional: URP Volume profile swapped in while this domain is active.")]
+            public UnityEngine.Rendering.VolumeProfile volumeProfile;
+#endif
         }
 
         [SerializeField] private WaterWorldRuntimeData waterData;
@@ -38,6 +43,12 @@ namespace WorldBuilder.Runtime.Atmosphere
         [SerializeField] private float responseSpeed = 1.5f;
         [Tooltip("AudioMixerSnapshot crossfade duration when the domain changes.")]
         [Min(0f)] [SerializeField] private float snapshotTransitionSeconds = 0.4f;
+
+#if WB_CORE_RP
+        [Tooltip("Optional URP Volume whose profile is swapped per domain.")]
+        [SerializeField] private UnityEngine.Rendering.Volume targetVolume;
+#endif
+
         [SerializeField] private DomainLook[] looks =
         {
             new DomainLook { domain = EnvironmentDomain.OpenAir },
@@ -80,6 +91,9 @@ namespace WorldBuilder.Runtime.Atmosphere
                 current = domain;
                 DomainChanged?.Invoke(domain);
                 TransitionAudio(FindLook(current));
+#if WB_CORE_RP
+                SwapVolumeProfile(FindLook(current));
+#endif
             }
 
             DomainLook target = FindLook(current);
@@ -114,5 +128,15 @@ namespace WorldBuilder.Runtime.Atmosphere
             if (snapshot.audioMixer == null) return;
             snapshot.TransitionTo(Mathf.Max(0f, snapshotTransitionSeconds));
         }
+
+#if WB_CORE_RP
+        private void SwapVolumeProfile(DomainLook target)
+        {
+            if (targetVolume == null) return;
+            UnityEngine.Rendering.VolumeProfile profile = target?.volumeProfile;
+            targetVolume.sharedProfile = profile;
+            targetVolume.enabled = profile != null;
+        }
+#endif
     }
 }

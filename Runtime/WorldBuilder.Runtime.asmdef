@@ -5,7 +5,8 @@
         "Unity.Burst",
         "Unity.Collections",
         "Unity.Jobs",
-        "Unity.Mathematics"
+        "Unity.Mathematics",
+        "Unity.RenderPipelines.Core.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
@@ -24,6 +25,11 @@
             "name": "com.unity.addressables",
             "expression": "1.0",
             "define": "WB_ADDRESSABLES"
+        },
+        {
+            "name": "com.unity.render-pipelines.core",
+            "expression": "1.0",
+            "define": "WB_CORE_RP"
         }
     ],
     "noEngineReferences": false
