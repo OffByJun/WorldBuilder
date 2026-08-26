@@ -42,6 +42,16 @@ namespace WorldBuilder.Runtime.WorldTime
 
         public void SetSeason(float value) => seasonValue = Mathf.Repeat(value, 4f);
 
+        // Base values written by other systems (weather, environment FX). We remember what
+        // we applied last frame so external writes are adopted instead of compounded —
+        // multiplying RenderSettings every frame would otherwise darken toward black.
+        private Color baseFog = Color.white;
+        private Color baseAmbient = Color.white;
+        private float baseIntensity = 1f;
+        private Color appliedFog = new Color(-1f, -1f, -1f);
+        private Color appliedAmbient = new Color(-1f, -1f, -1f);
+        private float appliedIntensity = -1f;
+
         private void LateUpdate()
         {
             WorldClock activeClock = clock != null ? clock : WorldClock.Instance;
@@ -66,10 +76,15 @@ namespace WorldBuilder.Runtime.WorldTime
                 tint = new Color(tinted.x, tinted.y, tinted.z, 1f);
             }
 
-            RenderSettings.fogColor *= tint;
-            RenderSettings.ambientLight *= tint;
-            RenderSettings.ambientIntensity *=
-                Mathf.Lerp(nightAmbientScale, 1f, blendedDaylight);
+            AdoptExternalWrites();
+
+            RenderSettings.fogColor = Mul(baseFog, tint);
+            RenderSettings.ambientLight = Mul(baseAmbient, tint);
+            RenderSettings.ambientIntensity =
+                baseIntensity * Mathf.Lerp(nightAmbientScale, 1f, blendedDaylight);
+            appliedFog = RenderSettings.fogColor;
+            appliedAmbient = RenderSettings.ambientLight;
+            appliedIntensity = RenderSettings.ambientIntensity;
 
             if (sunLight == null && activeClock != null) sunLight = RenderSettings.sun;
             if (sunLight != null)
@@ -78,6 +93,17 @@ namespace WorldBuilder.Runtime.WorldTime
                 sunLight.color = sunColor.Evaluate(elevation01);
             }
         }
+
+        private void AdoptExternalWrites()
+        {
+            if (RenderSettings.fogColor != appliedFog) baseFog = RenderSettings.fogColor;
+            if (RenderSettings.ambientLight != appliedAmbient)
+                baseAmbient = RenderSettings.ambientLight;
+            if (!Mathf.Approximately(RenderSettings.ambientIntensity, appliedIntensity))
+                baseIntensity = RenderSettings.ambientIntensity;
+        }
+
+        private static Color Mul(Color a, Color b) => new Color(a.r * b.r, a.g * b.g, a.b * b.b, 1f);
 
         private static float SunElevation(WorldClock clock)
         {

@@ -36,6 +36,8 @@ namespace WorldBuilder.Runtime.Terrain
             var stack = new Stack<(int ix, int iy, int iz)>();
 
             SeedBaseRows(store, chunkSize, minY, maxY, visited, stack);
+            if (visited.Count > nodeBudget)
+                report.Complete = false; // seeding alone exceeded the cap
 
             int resolution = store.Resolution;
             float spacing = chunkSize / resolution;
@@ -182,6 +184,7 @@ namespace WorldBuilder.Runtime.Terrain
 
         private void Update()
         {
+            if (store == null) return;
             timer += Time.deltaTime;
             if (!dirty || timer < checkIntervalSeconds) return;
             timer = 0f;

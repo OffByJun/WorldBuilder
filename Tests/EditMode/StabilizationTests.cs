@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using WorldBuilder.Runtime.Data;
@@ -83,6 +84,84 @@ namespace WorldBuilder.Tests
         }
 
         // ---- Groundwater vs authored body priority ----
+
+        private sealed class AirPocketService : IWaterQueryService
+        {
+            public WaterSample Sample(Vector3 position) =>
+                new WaterSample(FluidType.Air, position.y + 2f, 0f, Vector3.zero, 0f,
+                    555, 100); // sealed dry pocket
+            public int SampleBatch(Vector3[] positions, WaterSample[] results)
+            {
+                for (int i = 0; i < positions.Length; i++) results[i] = Sample(positions[i]);
+                return positions.Length;
+            }
+        }
+
+        [Test]
+        public void Groundwater_DoesNotFloodAuthoredAirPockets()
+        {
+            // Table far ABOVE the pocket — old behaviour flooded sealed dry rooms.
+            var service = new GroundwaterService(new AirPocketService(), waterTableY: -20f);
+            WaterSample sample = service.Sample(new Vector3(8f, -30f, 8f));
+
+            Assert.That(sample.IsInWater, Is.False,
+                "an authored air override below the table stays dry");
+            Assert.That(sample.WaterBodyId, Is.EqualTo(555));
+        }
+
+        // ---- Stability scan budget ----
+
+        [Test]
+        public void Stability_BudgetExhaustionMarksReportIncomplete()
+        {
+            var store = ScriptableObject.CreateInstance<VoxelStoreAsset>();
+            for (int cz = -1; cz <= 1; cz++)
+            for (int cx = -1; cx <= 1; cx++)
+            {
+                VoxelChunkEntry entry = store.GetOrCreate(new Vector3Int(cx, 0, cz));
+                for (int i = 0; i < entry.density.Length; i++) entry.density[i] = 1f;
+            }
+
+            StabilityReport report = CaveStabilityAnalyzer.FindDetachedSolid(
+                store, chunkSize: 16f, nodeBudget: 50);
+
+            Assert.That(report.Complete, Is.False, "tiny budget must truncate the flood");
+            UnityEngine.Object.DestroyImmediate(store);
+        }
+
+        // ---- World map shading monotonicity ----
+
+        [Test]
+        public void DepthMap_DeeperWaterRendersDarker()
+        {
+            const int resolution = 16;
+            const float chunkSize = 16f;
+            var store = ScriptableObject.CreateInstance<VoxelStoreAsset>();
+            // Two seabed terraces: shallow left half (floor -4), deep right half (-14).
+            // Solid fills from the chunk bottom UP TO the floor level (a real seabed).
+            foreach (int cx in new[] { 0, 1 })
+            {
+                VoxelChunkEntry entry = store.GetOrCreate(new Vector3Int(cx, -1, 0));
+                float floorY = cx == 0 ? -4f : -14f;
+                int floorTopRow = Mathf.CeilToInt((floorY + 16f) / 16f * resolution);
+                for (int x = 0; x < resolution; x++)
+                for (int y = 0; y < resolution; y++)
+                for (int z = 0; z < resolution; z++)
+                    store.SetDensity(entry, x, y, z, y <= floorTopRow ? 1f : 0f);
+            }
+
+            Color32[] map = MinimapDepthBaker.BakeDepth(store, chunkSize,
+                new Vector2(0f, 0f), resolutionPx: 32, sizeMeters: 32f, seaLevel: 0f);
+
+            // Pick texels strictly inside each chunk (away from the z=0 border where a
+            // missing neighbour chunk would halve the interpolated density).
+            Color32 shallow = map[12 * 32 + 12];
+            Color32 deep = map[12 * 32 + 28];
+            Assert.That(deep.b, Is.LessThan(shallow.b),
+                $"deeper column must shade darker (shallow={shallow} deep={deep})");
+
+            UnityEngine.Object.DestroyImmediate(store);
+        }
 
         [Test]
         public void Groundwater_YieldsToAuthoredOceanAboveTheTable()

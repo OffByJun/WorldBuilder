@@ -35,13 +35,15 @@ namespace WorldBuilder.Runtime.Water
             if (inner != null)
             {
                 WaterSample authored = inner.Sample(position);
-                if (authored.IsInWater && position.y <= authored.SurfaceHeight) return authored;
+                // Any real body hit (including AirOverrideVolume dry pockets) wins over the
+                // table: Priority of a genuine sample is always above the table sentinel.
+                if (authored.Priority > int.MinValue) return authored;
             }
 
             float table = waterTableProvider();
-            if (position.y >= table) return inner != null ? inner.Sample(position) : WaterSample.Air;
+            if (position.y >= table) return WaterSample.Air;
 
-            // Below the table: still groundwater with no flow.
+            // Below the table and nothing authored here: still groundwater, no flow.
             return new WaterSample(FluidType.Water, table, table - position.y,
                 Vector3.zero, 0f, TableBodyId, TablePriority);
         }

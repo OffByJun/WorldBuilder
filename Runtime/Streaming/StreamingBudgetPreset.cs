@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace WorldBuilder.Runtime.Streaming
@@ -89,8 +90,12 @@ namespace WorldBuilder.Runtime.Streaming
             if (timer < preset.focusIntervalSeconds) return;
             timer = 0f;
 
-            // Fire-and-forget: the service serializes focus changes internally.
-            _ = service.SetFocusAsync(FocusTarget.position, preset.regionRadius, destroyCancellationToken);
+            // Fire-and-forget, but surface faults instead of silently swallowing them.
+            System.Threading.Tasks.Task focusTask = service.SetFocusAsync(
+                FocusTarget.position, preset.regionRadius, destroyCancellationToken);
+            focusTask.ContinueWith(t => Debug.LogException(
+                    t.Exception?.GetBaseException() ?? new Exception("region focus failed")),
+                System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted);
         }
     }
 }

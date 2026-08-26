@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.16.2 — Stabilization II
+
+### 치명 수정
+
+* **DayNightAtmosphere 색 누적 변질** — 매 프레임 `RenderSettings.fogColor *= tint`가 지수적으로
+  검게 만들던 버그. 베이스값 스냅샷 + 외부 쓰기 감지(adopt) 방식으로 재작성 — 날씨/환경 FX와
+  충돌 없이 공존하며 밤 틴트만 적용
+* **지하수대가 에어 오버라이드를 덮음** — 수면 아래 밀폐 AirOverrideVolume이 waterTableY보다
+  깊으면 GroundwaterService가 침수로 뒤덮던 의미론 버그. 이제 authored 샘플(Priority > 센티널)은
+  Water/Air 무관하게 항상 승리
+
+### 견고성
+
+* CollapseWatcher — store 미할당 시 NRE 대신 조용히 대기
+* StreamingBudgetDriver — fire-and-forget 포커스 태스크의 예외를 로깅 (무음 실패 제거)
+
+### 회귀 테스트 (4건 추가)
+
+* 지하수대 위 에어 오버라이드 유지, 안정성 스캔 노드 예산 truncation 플래그,
+  수심 맵 심도 단조 셰이딩(청크 경계 회피 검증 포함)
+
 ## 0.16.1 — Stabilization
 
 ### 수정
