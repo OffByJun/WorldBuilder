@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.Audio;
 using WorldBuilder.Runtime.Data;
 using WorldBuilder.Runtime.Environment;
 using WorldBuilder.Runtime.Terrain;
@@ -25,6 +26,9 @@ namespace WorldBuilder.Runtime.Atmosphere
             public float ambientIntensity = 1f;
             public Color ambientColor = new Color(0.6f, 0.7f, 0.9f);
             public bool overrideAmbientColor;
+
+            [Tooltip("Optional: mixer snapshot switched to while this domain is active (underwater muffle, cave reverb…).")]
+            public AudioMixerSnapshot mixerSnapshot;
         }
 
         [SerializeField] private WaterWorldRuntimeData waterData;
@@ -32,6 +36,8 @@ namespace WorldBuilder.Runtime.Atmosphere
         [SerializeField] private float chunkSize = 128f;
         [SerializeField] private Transform probe;
         [SerializeField] private float responseSpeed = 1.5f;
+        [Tooltip("AudioMixerSnapshot crossfade duration when the domain changes.")]
+        [Min(0f)] [SerializeField] private float snapshotTransitionSeconds = 0.4f;
         [SerializeField] private DomainLook[] looks =
         {
             new DomainLook { domain = EnvironmentDomain.OpenAir },
@@ -73,6 +79,7 @@ namespace WorldBuilder.Runtime.Atmosphere
             {
                 current = domain;
                 DomainChanged?.Invoke(domain);
+                TransitionAudio(FindLook(current));
             }
 
             DomainLook target = FindLook(current);
@@ -98,6 +105,14 @@ namespace WorldBuilder.Runtime.Atmosphere
             foreach (DomainLook look in looks)
                 if (look != null && look.domain == domain) return look;
             return null;
+        }
+
+        private void TransitionAudio(DomainLook target)
+        {
+            if (target?.mixerSnapshot == null) return;
+            AudioMixerSnapshot snapshot = target.mixerSnapshot;
+            if (snapshot.audioMixer == null) return;
+            snapshot.TransitionTo(Mathf.Max(0f, snapshotTransitionSeconds));
         }
     }
 }

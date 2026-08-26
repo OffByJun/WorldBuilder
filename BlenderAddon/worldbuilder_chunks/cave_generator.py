@@ -237,6 +237,7 @@ def generate(context, settings):
 
     materials = _cave_materials()
     created = []
+    tunnel_endpoints = []
     for index in range(max(1, int(settings.tunnel_count))):
         points, profile = _tunnel_path(settings, rng, index)
         pool = range(4, max(5, len(points) - 4))
@@ -274,6 +275,20 @@ def generate(context, settings):
         obj["wb_shader_family"] = "CAVE"
         obj["wb_id"] = _stable_id(settings.seed, f"{settings.preset}.{index}")
         created.append(obj)
+        tunnel_endpoints.append(max(points, key=lambda point: point.z))
+
+    if settings.export_entrance_markers and tunnel_endpoints:
+        half_h = max(settings.height * 0.5 - settings.radius - 0.5, 0.5)
+        centre = _generation_centre()
+        for index, endpoint in enumerate(tunnel_endpoints):
+            marker = bpy.data.objects.new(f"CaveEntrance_{index + 1:02d}", None)
+            collection.objects.link(marker)
+            marker.location = (endpoint.x, endpoint.y, centre.z + half_h)
+            marker.empty_display_type = "SPHERE"
+            marker.empty_display_size = 2.0
+            marker[TAG] = True
+            marker["wb_cave_entrance"] = index
+            created.append(marker)
 
     if created:
         context.view_layer.objects.active = created[0]
@@ -302,6 +317,10 @@ class WBCaveSettings(PropertyGroup):
     room_scale: FloatProperty(name="Room Scale", default=2.1, min=1.0, max=6.0)
     ring_sides: IntProperty(name="Ring Sides", default=10, min=5, max=24)
     replace_existing: BoolProperty(name="Replace Existing", default=True)
+    export_entrance_markers: BoolProperty(
+        name="Export Entrance Markers",
+        default=True,
+        description="Create CaveEntrance_NN empties at the highest tunnel endpoints so Unity can carve matching walk-in shafts")
 
 
 class WB_OT_generate_caves(Operator):
@@ -389,6 +408,9 @@ class WB_PT_cave_generator(Panel):
         rooms.label(text="케버른 룸" if korean else "Cavern Rooms")
         rooms.prop(settings, "room_count", text="개수" if korean else "Count")
         rooms.prop(settings, "room_scale", text="크기 배율" if korean else "Scale")
+
+        layout.prop(settings, "export_entrance_markers",
+                    text="입구 마커 생성" if korean else "Export Entrance Markers")
 
         layout.prop(settings, "replace_existing",
                     text="기존 생성물 교체" if korean else "Replace Existing")

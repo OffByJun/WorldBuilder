@@ -232,6 +232,38 @@ namespace WorldBuilder.Runtime.Terrain
         }
 
         /// <summary>
+        /// Single-column variant used by editor tooling (e.g. aligning entrances to
+        /// imported Blender markers): carves one shaft at the given world XZ when cave air
+        /// exists beneath it. Returns voxels changed, 0 when no cavity was found below.
+        /// </summary>
+        public static int CarveEntranceAt(VoxelStoreAsset store, TerrainField.HeightMap heights,
+            TerrainShapeParams shape, CaveShapeParams caves, float chunkSize, Vector2 worldXz,
+            float shaftRadius = 1.6f)
+        {
+            if (store == null || heights == null || shape == null || caves == null) return 0;
+
+            int resolution = store.Resolution;
+            var sampler = new VoxelWorldSampler(store, chunkSize);
+            float spacing = chunkSize / resolution;
+
+            float surface = heights.SampleWorld(worldXz);
+            float? caveAirY = null;
+            for (float y = surface - caves.surfaceProtectDepth - 1f; y >= caves.minY; y -= spacing)
+            {
+                if (sampler.Sample(worldXz.x, y, worldXz.y) < SurfaceNetsMesher.IsoLevel)
+                {
+                    caveAirY = y;
+                    break;
+                }
+            }
+            if (caveAirY == null) return 0;
+
+            Vector3 top = new Vector3(worldXz.x, surface + 0.5f, worldXz.y);
+            Vector3 bottom = new Vector3(worldXz.x, caveAirY.Value - shaftRadius, worldXz.y);
+            return CarveShaft(store, chunkSize, top, bottom, shaftRadius, spacing);
+        }
+
+        /// <summary>
         /// Punches walk-in shafts from the surface down into discovered cave air, so
         /// carved networks are reachable without manual digging. Deterministic via the
         /// combined seed. Returns the number of voxels changed.
@@ -248,11 +280,6 @@ namespace WorldBuilder.Runtime.Terrain
             if (rngSeed == 0u) rngSeed = 1u;
             var rng = new Unity.Mathematics.Random(rngSeed);
 
-            int resolution = store.Resolution;
-            var sampler = new VoxelWorldSampler(store, chunkSize);
-            float spacing = chunkSize / resolution;
-
-            // Candidate grid over the heightmap footprint.
             int minX = Mathf.CeilToInt(heights.Origin.x / chunkSize);
             int minZ = Mathf.CeilToInt(heights.Origin.y / chunkSize);
             int spanChunks = Mathf.CeilToInt((heights.Size - 1) * heights.CellSize / chunkSize);
@@ -271,25 +298,13 @@ namespace WorldBuilder.Runtime.Terrain
 
                 Vector2 worldXz = new Vector2((cx + rng.NextFloat()) * chunkSize,
                     (cz + rng.NextFloat()) * chunkSize);
-                float surface = heights.SampleWorld(worldXz);
-
-                // Find the first open air pocket below the protection shell.
-                float? caveAirY = null;
-                for (float y = surface - caves.surfaceProtectDepth - 1f; y >= caves.minY; y -= spacing)
+                int changed = CarveEntranceAt(store, heights, shape, caves, chunkSize,
+                    worldXz, shaftRadius);
+                if (changed > 0)
                 {
-                    if (sampler.Sample(worldXz.x, y, worldXz.y) < SurfaceNetsMesher.IsoLevel)
-                    {
-                        caveAirY = y;
-                        break;
-                    }
+                    totalChanged += changed;
+                    placed++;
                 }
-                if (caveAirY == null) continue;
-
-                // Carve a narrow shaft from just above ground down into that pocket.
-                Vector3 center = new Vector3(worldXz.x, surface + 0.5f, worldXz.y);
-                Vector3 bottom = new Vector3(worldXz.x, caveAirY.Value - shaftRadius, worldXz.y);
-                totalChanged += CarveShaft(store, chunkSize, center, bottom, shaftRadius, spacing);
-                placed++;
             }
 
             return totalChanged;

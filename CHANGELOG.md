@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.12.2 — Cross-Tool Entrances & Seasonal Bakes
+
+### 블렌더 ↔ Unity 동굴 입구 정렬
+
+* Blender Cave Network Builder에 **입구 마커 익스포트**(기본 on) — 터널 최고점마다
+  `CaveEntrance_NN` Empty 생성
+* `CaveField.CarveEntranceAt` 공개 API — 지정 XZ 단일 컬럼 관통(공기 탐색 실패 시 0 반환)
+* `WorldBuilder/Caves/Carve Entrances At Marker Objects` 메뉴 — 씬의 마커를 읽어 로컬 하이트맵으로
+  보호 깊이를 재계산한 뒤 샤프트 카빙 + 주변 청크 즉시 리메시
+
+### Terrain Forge
+
+* **Season Palette 연동** — 팔레트 SO + 베이크 시즌 슬라이더(-1 off / 0 봄~3 겨울).
+  버텍스 컬러를 계절색으로 70% 블렌딩하되 기존 이중선형 경계 부드러움 유지
+
+### EnvironmentFxRig
+
+* 도메인별 **AudioMixerSnapshot 자동 전환** — 수중 머플/동굴 리버브 등을 DomainLook에 스냅샷으로
+  지정하면 도메인 변경 시 크로스페이드
+
+### 테스트
+
+* 단일 컬럼 입구 관통(성공/무공기 0 반환), 블렌더 마커 개수·이름 검증으로 스모크 강화
+
 ## 0.12.1 — Audit & Tool Wiring
 
 ### 검증(Audit)

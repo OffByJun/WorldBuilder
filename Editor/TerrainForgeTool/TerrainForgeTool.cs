@@ -35,6 +35,8 @@ namespace WorldBuilder.Editor.TerrainForgeTool
         [SerializeField] private int erosionSeed = 42;
         [SerializeField] private bool bakeMeshes = true;
         [SerializeField] private HighResBiomeMap biomeMap;
+        [SerializeField] private SeasonPalette seasonPalette;
+        [Min(-1)] [SerializeField] private int bakeSeason = -1; // -1 off, 0 spring .. 3 winter
         [SerializeField] private bool paintVertexBiomes = true;
         [SerializeField] private bool assembleSceneObjects = true;
         [SerializeField] private bool addColliders = true;
@@ -216,6 +218,21 @@ namespace WorldBuilder.Editor.TerrainForgeTool
                 cachedSectionOrigin = null;
             });
             biomeFoldout.Add(biomeField);
+
+            ObjectField seasonPaletteField = new ObjectField("Season Palette")
+            {
+                objectType = typeof(SeasonPalette),
+                value = seasonPalette,
+                tooltip = "Optional. Recolors vertex biomes with seasonal palette colors."
+            };
+            seasonPaletteField.RegisterValueChangedCallback(evt => seasonPalette = evt.newValue as SeasonPalette);
+            biomeFoldout.Add(seasonPaletteField);
+
+            SliderInt seasonSlider = new SliderInt("Bake Season (-1 off)", -1, 3) { value = bakeSeason };
+            seasonSlider.RegisterValueChangedCallback(evt => bakeSeason = evt.newValue);
+            seasonSlider.SetEnabled(seasonPalette != null);
+            biomeFoldout.Add(seasonSlider);
+
             biomeFoldout.Add(new Button(ApplyBiomes) { text = WorldBuilderLocalization.Get("btn.applyBiomes") });
             root.Add(biomeFoldout);
 
@@ -507,7 +524,15 @@ namespace WorldBuilder.Editor.TerrainForgeTool
 
             Func<Vector3, Color> baseColorSampler =
                 paintVertexBiomes && biomeMap != null
-                    ? (Func<Vector3, Color>)(v => biomeMap.SampleColor(v.x, v.z, chunkSize))
+                    ? (Func<Vector3, Color>)(v =>
+                    {
+                        Color biomeColor = biomeMap.SampleColor(v.x, v.z, chunkSize);
+                        if (seasonPalette == null || bakeSeason < 0) return biomeColor;
+                        BiomeType biome = biomeMap.SampleBiome(v.x, v.z, chunkSize);
+                        Color seasonal = seasonPalette.Sample(biome, bakeSeason);
+                        // Blend keeps bilinear border smoothness while tinting toward the season.
+                        return Color.Lerp(biomeColor, seasonal, 0.7f);
+                    })
                     : null;
 
             Func<Vector3, Color> colorSampler = baseColorSampler;

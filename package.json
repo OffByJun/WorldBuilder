@@ -1,7 +1,7 @@
 ﻿{
   "name": "com.emiteat.worldbuilder",
   "displayName": "WorldBuilder",
-  "version": "0.12.1",
+  "version": "0.12.2",
   "unity": "6000.4",
   "unityRelease": "2f1",
   "description": "Voxel world authoring tools for Unity 6 URP.",

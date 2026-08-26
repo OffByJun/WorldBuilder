@@ -138,6 +138,39 @@ namespace WorldBuilder.Tests
             Assert.That(caves.tunnelScale, Is.GreaterThan(60f), "abyssal tunnels are broad");
         }
 
+        [Test]
+        public void CarveEntranceAt_OpensShaftFromSurfaceIntoRoom()
+        {
+            VoxelStoreAsset store = BuildSolidStoreWithRoom(out Vector3 roomCenter);
+            var sampler = new VoxelWorldSampler(store, 16f);
+
+            TerrainShapeParams shape = CreateTerrainParams();
+            CaveShapeParams caves = CreateCaveParams();
+            caves.surfaceProtectDepth = 4f;
+            caves.minY = -14f; // stay inside the synthetic store (chunks span [-16..32))
+
+            // Single-cell heightmap: flat surface at y=20 above the room.
+            var heights = new TerrainField.HeightMap(new[] { 20f }, 1,
+                new Vector2(7.5f, 7.5f), cellSize: 1f);
+
+            int changed = CaveField.CarveEntranceAt(store, heights, shape, caves, 16f,
+                new Vector2(8f, 8f), shaftRadius: 1.5f);
+            Assert.That(changed, Is.GreaterThan(0), "shaft should carve into the room below");
+
+            // The shaft is open from near the surface down into the cavity.
+            for (float y = 18f; y >= 10.5f; y -= 1f)
+            {
+                float density = sampler.Sample(8f, y, 8f);
+                Assert.That(density, Is.LessThan(SurfaceNetsMesher.IsoLevel),
+                    $"shaft blocked at y={y:F1} (density {density:F3})");
+            }
+
+            // No air below → nothing carved.
+            int miss = CaveField.CarveEntranceAt(store, heights, shape, caves, 16f,
+                new Vector2(15.9f, 15.9f));
+            Assert.That(miss, Is.EqualTo(0), "column without cave air must stay solid");
+        }
+
         private static float FindSurface(VoxelWorldSampler sampler, float x, float z)
         {
             for (float y = 120f; y > -60f; y -= 0.25f)

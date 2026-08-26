@@ -22,12 +22,16 @@ for index, preset in enumerate(("LIMESTONE", "LAVA_TUBES", "FLOODED_GROTTO", "AB
     settings.seed = 900 + index
     collection, created = cave_generator.generate(bpy.context, settings)
 
-    assert len(created) == int(settings.tunnel_count), (preset, len(created))
-    triangles = sum(len(obj.data.polygons) for obj in created)
+    tunnels = [obj for obj in created if obj.type == "MESH"]
+    markers = [obj for obj in created if obj.get("wb_cave_entrance") is not None]
+    assert len(tunnels) == int(settings.tunnel_count), (preset, len(tunnels))
+    assert len(markers) == len(tunnels), (preset, len(markers))  # markers on by default
+    assert all(marker.name.startswith("CaveEntrance_") for marker in markers), preset
+    triangles = sum(len(obj.data.polygons) for obj in tunnels)
     assert triangles > 200, (preset, triangles)
 
     # Closed manifold-ish: every tube carries the cave biome attribute at weight 1.
-    for obj in created:
+    for obj in tunnels:
         attribute = obj.data.attributes.get("WB_BIOME_CAVE")
         assert attribute is not None, obj.name
         assert all(item.value == 1.0 for item in attribute.data), obj.name
@@ -35,10 +39,12 @@ for index, preset in enumerate(("LIMESTONE", "LAVA_TUBES", "FLOODED_GROTTO", "AB
         assert obj.get("wb_shader_family") == "CAVE", obj.name
 
     # Determinism: same seed rebuilds identical vertex counts.
-    first_counts = [len(obj.data.vertices) for obj in created]
+    first_counts = [len(obj.data.vertices) for obj in tunnels]
     cave_generator.clear_generated(bpy.context)
     _, recreated = cave_generator.generate(bpy.context, settings)
-    assert [len(obj.data.vertices) for obj in recreated] == first_counts, preset
+    recreated_tunnels = [obj for obj in recreated if obj.type == "MESH"]
+    assert [len(obj.data.vertices) for obj in recreated_tunnels] == first_counts, preset
+    assert any(obj.get("wb_cave_entrance") is not None for obj in recreated), preset
 
     # Bounds: every vertex stays inside a sane envelope of the requested volume.
     # Room bulges legitimately exceed the walk-path margin by up to room_scale × radius.
@@ -47,7 +53,7 @@ for index, preset in enumerate(("LIMESTONE", "LAVA_TUBES", "FLOODED_GROTTO", "AB
     limit_x = settings.width * 0.5 + bulge
     limit_y = settings.depth * 0.5 + bulge
     limit_z = settings.height * 0.5 + bulge
-    for obj in recreated:
+    for obj in recreated_tunnels:
         for vertex in obj.data.vertices:
             if centre is not None:
                 local = vertex.co - centre
@@ -55,7 +61,7 @@ for index, preset in enumerate(("LIMESTONE", "LAVA_TUBES", "FLOODED_GROTTO", "AB
                 assert abs(local.y) <= limit_y, (preset, "y", vertex.co)
                 assert abs(local.z) <= limit_z, (preset, "z", vertex.co)
 
-    results.append((preset, len(created), triangles))
+    results.append((preset, len(tunnels), len(markers), triangles))
     cave_generator.clear_generated(bpy.context)
     assert not any(obj.get("wb_cave_generated") for obj in bpy.data.objects), preset
 
