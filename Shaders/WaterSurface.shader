@@ -13,6 +13,9 @@ Shader "WorldBuilder/WaterSurface"
         _FresnelBoost("Fresnel Sky Boost", Range(0, 1)) = 0.35
         _FoamThreshold("Foam Crest Threshold", Range(0, 1)) = 0.62
         _FoamSharpness("Foam Sharpness", Range(1, 16)) = 6
+        [Normal] _FlowDirection("Flow Direction (XY)", Vector) = (1, 0, 0, 0)
+        _FlowSpeed("Flow Advection Speed", Range(0, 8)) = 1.5
+        _FlowTint("Flow Streak Tint", Color) = (0.75, 0.92, 1.0, 1)
     }
 
     SubShader
@@ -36,19 +39,22 @@ Shader "WorldBuilder/WaterSurface"
             #pragma fragment frag
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-            CBUFFER_START(UnityPerMaterial)
-                float4 _DeepColor;
-                float4 _ShallowColor;
-                float4 _FoamColor;
-                float _Alpha;
-                float _WaveAmplitude;
-                float _WaveLength;
-                float _WaveSpeed;
-                float _FresnelPower;
-                float _FresnelBoost;
-                float _FoamThreshold;
-                float _FoamSharpness;
-            CBUFFER_END
+        CBUFFER_START(UnityPerMaterial)
+            float4 _DeepColor;
+            float4 _ShallowColor;
+            float4 _FoamColor;
+            float4 _FlowTint;
+            float2 _FlowDirection;
+            float _Alpha;
+            float _WaveAmplitude;
+            float _WaveLength;
+            float _WaveSpeed;
+            float _FresnelPower;
+            float _FresnelBoost;
+            float _FlowSpeed;
+            float _FoamThreshold;
+            float _FoamSharpness;
+        CBUFFER_END
 
             struct Attributes
             {
@@ -62,7 +68,14 @@ Shader "WorldBuilder/WaterSurface"
                 float3 positionWS : TEXCOORD0;
                 float3 normalWS : TEXCOORD1;
                 float crest : TEXCOORD2;
+                float flowStreak : TEXCOORD3;
             };
+
+            float2 Normalize2(float2 v)
+            {
+                float len = max(length(v), 1e-4);
+                return v / len;
+            }
 
             // Sum of three travelling sine waves; returns height and writes gradient dHdXZ.
             float WaveField(float2 wxz, out float2 gradient)
@@ -70,6 +83,10 @@ Shader "WorldBuilder/WaterSurface"
                 const float kPi = 3.14159265;
                 float k = 2.0 * kPi / max(_WaveLength, 0.25);
                 float t = _TimeParameters.x * _WaveSpeed;
+
+                // Advect the pattern downstream so currents are visible.
+                float2 flow = Normalize2(_FlowDirection) * _FlowSpeed * _TimeParameters.x;
+                wxz -= flow;
 
                 float2 dir0 = normalize(float2(1.0, 0.35));
                 float2 dir1 = normalize(float2(-0.6, 1.0));
@@ -90,6 +107,12 @@ Shader "WorldBuilder/WaterSurface"
                 return sin(p0) * a0 + sin(p1) * a1 + sin(p2) * a2;
             }
 
+            float2 saffenorm2(float2 v)
+            {
+                float len = max(length(v), 1e-4);
+                return v / len;
+            }
+            // (kept for compatibility with older material copies)
             Varyings vert(Attributes IN)
             {
                 Varyings OUT;
@@ -100,12 +123,19 @@ Shader "WorldBuilder/WaterSurface"
                 float height = WaveField(positionWS.xz, gradient);
                 positionWS.y += height;
 
+                // Flow streaks: bright lines aligned with the current direction.
+                float2 flowDir = Normalize2(_FlowDirection + 1e-4);
+                float streak = sin(dot(positionWS.xz, float2(-flowDir.y, flowDir.x)) * 0.8
+                                   - _TimeParameters.x * _FlowSpeed * 2.0) * 0.5 + 0.5;
+                streak = smoothstep(0.82, 1.0, streak);
+
                 float3 normalWS = normalize(float3(-gradient.x, 1.0, -gradient.y));
 
                 OUT.positionHCS = TransformWorldToHClip(positionWS);
                 OUT.positionWS = positionWS;
                 OUT.normalWS = normalWS;
                 OUT.crest = saturate((height / max(_WaveAmplitude, 0.001)) * 0.5 + 0.5);
+                OUT.flowStreak = streak;
                 return OUT;
             }
 
@@ -122,7 +152,10 @@ Shader "WorldBuilder/WaterSurface"
 
                 color.rgb += _FresnelBoost * fresnel;
                 color.rgb = lerp(color.rgb, _FoamColor.rgb, foamMask);
-                color.a = saturate(_Alpha + foamMask * 0.14);
+
+                // Flow streaks tint the surface along the current.
+                color.rgb = lerp(color.rgb, _FlowTint.rgb, IN.flowStreak * 0.25);
+                color.a = saturate(_Alpha + foamMask * 0.14 + IN.flowStreak * 0.08);
                 return color;
             }
             ENDHLSL

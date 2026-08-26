@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.17.0 — World Change & Extensibility
+
+### 월드 변화
+
+* `TerrainRegrowth` — 파괴된 청크가 절차적 하이트필드로 서서히 이완 복원(예산화 틱, 수렴 추적,
+  재파괴 시 수렵 해제). 케이브 카빙은 바인딩 이전 필드라 보존됨
+* `WaterfallScanner/Emitter` — 물 표면 아래 천장(수급 암반)→공동 구조를 스캔해 폭포 입구 후보와
+  낙차를 산출, 파티클 폴백 포함
+* `CreatureSpawnZone` 계절 게이트(`activeSeasons` + `SeasonState.CurrentSeason`)
+* **POI 후보 추천** — `PoiCandidateAnalyzer`(hilltop/lakeshore/cave-mouth 스코어링) +
+  *WorldBuilder/Audit/Suggest POI Candidates* 메뉴(마커 자동 생성)
+
+### 비주얼
+
+* **적설 채널** `_WB_Snow` — 위쪽 면 중심 화이트 블렌딩, `SnowCoverageDriver`(autoWinter)
+* **라이브 미니맵** — `LiveMinimapDisplay`: WorldMapBaker 텍스처 + 플레이어 마커 실시간 위치(WB_UGUI 가드)
+* **흐름 가시화 수면** — WaterSurface에 유속 어드벡션(패턴 하류 이동) + 흐름 방향 스트릭 틴트
+* **도메인 환경음** — EnvironmentFxRig DomainLook에 AudioClip+볼륨, A/B 소스 크로스페이드
+
+### 확장성
+
+* **데이터 모드 로더** — `ContentModLoader` JSON로 어종 테이블·성장 속도·채집 옵션 교체
+  (FishingSpot 레지스트리 + 에디터 폴더 적용 메뉴)
+* **세이브 마이그레이션** — `SaveMigrator` 버전 단계 체인(from→to 변환, 결손 단계 에러)
+* **게임플레이 스타터 킷** — FishingSpot/GrowableTree/GilledFish 프리팹 원클릭 생성 메뉴
+* **헤드리스 서버 부트스트랩** — 침식+붕괴+재생+수위+오토세이브를 한 컴포넌트로 기동
+
+### 문서/품질
+
+* `Documentation/KR/LivingWorldGuide.md` 신규(부트스트랩 구성·시간/날씨 루프·성장·낚시·생존·오토세이브)
+* BlenderAddon README에 Cave Builder→Unity 정렬 워크플로 섹션 추가
+* 컴포넌트 기즈모 에디터 모음(Fishing/Harvestable/WaterBreather/CollapseWatcher)
+
+### 테스트
+
+* E2E 시나리오 테스트 추가(생성→카브→입구→볼륨 배치→굴착→세이브→복원 비교)
+
+> ⚠️ 이 릴리즈의 테스트 실행은 게임 프로젝트 측(Assets/001_Scripts)의 신규 컴파일 오류
+> (`using AstraNope.Editor` in runtime code)로 차단되었습니다. 패키지 자체는 이전 빌드까지
+> 전부 통과 상태이며, 게임 측 오류 해결 후 즉시 검증 가능합니다.
+
 ## 0.16.2 — Stabilization II
 
 ### 치명 수정

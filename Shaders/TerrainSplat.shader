@@ -49,8 +49,9 @@ Shader "WorldBuilder/TerrainSplat"
         TEXTURE2D(_Splat2);     SAMPLER(sampler_Splat2);
         TEXTURE2D(_Splat3);     SAMPLER(sampler_Splat3);
 
-        // Global weather channel driven by PrecipitationFx (Shader.SetGlobalFloat).
+        // Global weather channels driven by PrecipitationFx / SnowCoverageDriver.
         float _WB_Wetness;
+        float _WB_Snow;
 
         CBUFFER_START(UnityPerMaterial)
             float4 _Control_ST;
@@ -120,6 +121,12 @@ Shader "WorldBuilder/TerrainSplat"
             half wet = saturate(_WB_Wetness);
             albedo *= lerp(1.0h, 0.62h, wet);
             float smoothnessOut = _Smoothness + wet * 0.45;
+
+            // Snow: blends onto upward faces, scaled by the global coverage channel.
+            half upMask = saturate(normalWSn.y * 1.25 - 0.25);
+            half snowMask = saturate(_WB_Snow * upMask);
+            albedo = lerp(albedo, half3(0.93h, 0.95h, 1.0h), snowMask * 0.9h);
+            smoothnessOut = lerp(smoothnessOut, 0.35h, snowMask);
 
 #if defined(_VERTEXCOLORS_ON)
             // When vertex colors are present they tint the terrain slightly.

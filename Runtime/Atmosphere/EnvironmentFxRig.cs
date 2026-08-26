@@ -30,6 +30,10 @@ namespace WorldBuilder.Runtime.Atmosphere
             [Tooltip("Optional: mixer snapshot switched to while this domain is active (underwater muffle, cave reverb…).")]
             public AudioMixerSnapshot mixerSnapshot;
 
+            [Tooltip("Optional looping ambience clip crossfaded in for this domain.")]
+            public AudioClip ambientClip;
+            [Range(0f, 1f)] public float ambientVolume = 0.6f;
+
 #if WB_CORE_RP
             [Tooltip("Optional: URP Volume profile swapped in while this domain is active.")]
             public UnityEngine.Rendering.VolumeProfile volumeProfile;
@@ -65,6 +69,9 @@ namespace WorldBuilder.Runtime.Atmosphere
         private WaterQueryService waterService;
         private VoxelWorldSampler sampler;
         private EnvironmentDomain current = EnvironmentDomain.OpenAir;
+        private AudioSource ambientA;
+        private AudioSource ambientB;
+        private bool ambientToggle;
 
         public IWaterQueryService QueryServiceOverride { get; set; }
         public VoxelWorldSampler SamplerOverride { get; set; }
@@ -76,6 +83,27 @@ namespace WorldBuilder.Runtime.Atmosphere
         {
             if (waterData != null) waterService = new WaterQueryService(waterData);
             if (voxelStore != null) sampler = new VoxelWorldSampler(voxelStore, Mathf.Max(1f, chunkSize));
+            ambientA = CreateAmbientSource("A");
+            ambientB = CreateAmbientSource("B");
+        }
+
+        private void OnDisable()
+        {
+            if (ambientA != null) Destroy(ambientA.gameObject);
+            if (ambientB != null) Destroy(ambientB.gameObject);
+            ambientA = ambientB = null;
+        }
+
+        private AudioSource CreateAmbientSource(string suffix)
+        {
+            var go = new GameObject($"WB_Ambience_{suffix}");
+            go.transform.SetParent(transform, false);
+            var source = go.AddComponent<AudioSource>();
+            source.loop = true;
+            source.playOnAwake = false;
+            source.spatialBlend = 0f;
+            source.volume = 0f;
+            return source;
         }
 
         private void Update()
@@ -96,7 +124,12 @@ namespace WorldBuilder.Runtime.Atmosphere
 #endif
             }
 
-            DomainLook target = FindLook(current);
+            CrossfadeAmbient(Time.deltaTime);
+            ApplyAtmosphere(FindLook(current));
+        }
+
+        private void ApplyAtmosphere(DomainLook target)
+        {
             if (target == null) return;
             float step = Mathf.Max(0.1f, responseSpeed) * Time.deltaTime;
 
@@ -108,10 +141,41 @@ namespace WorldBuilder.Runtime.Atmosphere
             UnityEngine.RenderSettings.ambientLight = Color.Lerp(UnityEngine.RenderSettings.ambientLight,
                 target.overrideAmbientColor ? target.ambientColor : target.fogColor * 1.2f, step);
 
-            if (!Application.isPlaying) return; // intensity driven by Light in play mode only
             Light sun = UnityEngine.RenderSettings.sun;
-            if (sun != null)
+            if (sun != null && Application.isPlaying)
                 sun.intensity = Mathf.Lerp(sun.intensity, target.ambientIntensity, step);
+        }
+
+        private void CrossfadeAmbient(float deltaTime)
+        {
+            DomainLook look = FindLook(current);
+            AudioClip targetClip = look?.ambientClip;
+            float targetVolume = look != null ? look.ambientVolume : 0f;
+
+            AudioSource active = ambientToggle ? ambientA : ambientB;
+            AudioSource idle = ambientToggle ? ambientB : ambientA;
+
+            if (targetClip != null && (active.clip == null || active.clip != targetClip))
+            {
+                // Swap: fade out the old, start the new on the other source.
+                ambientToggle = !ambientToggle;
+                AudioSource previous = active;
+                active = idle;
+                idle = previous;
+                active.clip = targetClip;
+                active.volume = 0f;
+                active.Play();
+            }
+            else if (targetClip == null && active != null && active.isPlaying)
+            {
+                active.Stop();
+            }
+
+            float step = Mathf.Max(0.05f, deltaTime);
+            if (active != null)
+                active.volume = Mathf.MoveTowards(active.volume, targetVolume, step * 0.5f);
+            if (idle != null && idle.isPlaying)
+                idle.volume = Mathf.MoveTowards(idle.volume, 0f, step * 0.5f);
         }
 
         private DomainLook FindLook(EnvironmentDomain domain)

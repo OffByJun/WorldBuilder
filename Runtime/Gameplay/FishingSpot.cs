@@ -33,6 +33,12 @@ namespace WorldBuilder.Runtime.Gameplay
 
         private WaterQueryService service;
 
+        public static IReadOnlyList<FishingSpot> RegisteredSpots => GameplayRegistry.FishingSpots;
+
+        public static IReadOnlyList<FishingSpot> FishingSpots => GameplayRegistry.FishingSpots;
+
+        public void RegisterSelf() => GameplayRegistry.Register(this);
+
         public IReadOnlyList<FishEntry> Table => table;
         public Vector2 BiteDelay => biteDelaySeconds;
         public float ReelWindow => reelWindowSeconds;
@@ -40,7 +46,10 @@ namespace WorldBuilder.Runtime.Gameplay
         private void OnEnable()
         {
             if (waterData != null) service = new WaterQueryService(waterData);
+            GameplayRegistry.Register(this);
         }
+
+        private void OnDisable() => GameplayRegistry.Unregister(this);
 
         public void Configure(WaterWorldRuntimeData data) => Configure(data, biteDelaySeconds);
 

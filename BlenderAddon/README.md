@@ -122,3 +122,32 @@ The procedural terrain generator still has its own generation width and chunk co
 ## License
 
 MIT. See `LICENSE`.
+
+
+---
+
+## Cave Network Builder (0.9.1+)
+
+The **Cave Network Builder** panel (WorldBuilder sidebar → Cave Network Builder) generates
+deterministic procedural cave tunnels that match the Unity-side `CaveField` presets.
+
+### Workflow
+
+1. Pick a preset — Limestone Caves / Lava Tubes / Flooded Grotto / Abyssal Network
+2. Set bounds (Width/Depth/Height) and place the 3D cursor at the cave centre
+3. **Generate Cave Network** → closed tube meshes with `WB_BIOME_CAVE` vertex weights
+4. Keep **Export Entrance Markers** enabled → `CaveEntrance_NN` empties at each tunnel's
+   highest endpoint
+5. Export the chunk through the normal pipeline
+
+### Unity alignment
+
+1. Import the chunk as usual, select the imported cave object
+2. Run `WorldBuilder > Caves > Carve Store With Selected Mesh` — the voxel store is carved
+   along the mesh surface and affected chunks re-mesh immediately
+3. The entrance markers import as `CaveEntrance_*` objects; run
+   `WorldBuilder > Caves > Carve Entrances At Marker Objects` to punch matching walk-in
+   shafts from the surface down into each tunnel
+
+Smoke test: run `tests/blender_cave_generator_smoke.py` headless — it validates geometry,
+determinism, biome attributes and bounds for all four presets.

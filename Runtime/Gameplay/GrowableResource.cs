@@ -13,14 +13,21 @@ namespace WorldBuilder.Runtime.Gameplay
     public sealed class GrowableResource : MonoBehaviour
     {
         [SerializeField] private List<GameObject> stages = new List<GameObject>();
-        [Min(1f)] [SerializeField] private float secondsPerStage = 600f;
-        [SerializeField] private bool growOnlyWhenVisible = true;
+        [Min(1f)] [SerializeField] private float secondsPerStage = 600f;        [SerializeField] private bool growOnlyWhenVisible = true;
         [Tooltip("Start fully grown (placed by scatter as mature).")]
         [SerializeField] private bool startMature = true;
 
         public int CurrentStage { get; private set; }
         public int StageCount => stages.Count;
         public event Action<int> StageChanged;
+
+        /// <summary>Default stage duration for newly placed nodes; mods may override.</summary>
+        public static float DefaultsSecondsPerStage
+        {
+            get => defaultSecondsPerStage;
+            set => defaultSecondsPerStage = Mathf.Max(1f, value);
+        }
+        private static float defaultSecondsPerStage = 600f;
 
         private float stageTimer;
 
@@ -29,6 +36,9 @@ namespace WorldBuilder.Runtime.Gameplay
 
         private void OnEnable()
         {
+            // Adopt mod-driven default when the instance still carries the legacy value.
+            if (Mathf.Approximately(secondsPerStage, 600f))
+                secondsPerStage = DefaultsSecondsPerStage;
             SetStage(startMature ? StageCount - 1 : 0);
         }
 
@@ -104,6 +114,20 @@ namespace WorldBuilder.Runtime.Gameplay
         [Min(0f)] [SerializeField] private float harvestDurationSeconds;
         [SerializeField] private bool destroyOnHarvest;
 
+        /// <summary>Default yield table for newly placed nodes; mods may override.</summary>
+        public static List<GrowableResource.ItemYield> DefaultYields { get; set; } =
+            new List<GrowableResource.ItemYield>
+            {
+                new GrowableResource.ItemYield { itemId = "wood", minAmount = 1, maxAmount = 3 }
+            };
+
+        private void OnEnable()
+        {
+            if (yields == null || yields.Count == 0)
+                yields = DefaultYields;
+            ResolveGrowth();
+        }
+
         public IReadOnlyList<GrowableResource.ItemYield> Yields => yields;
         public float HarvestDuration => harvestDurationSeconds;
 
@@ -119,11 +143,6 @@ namespace WorldBuilder.Runtime.Gameplay
 
         public event Action<IReadOnlyList<GrowableResource.ItemYield>> Harvested;
         public event Action Respawned;
-
-        private void OnEnable()
-        {
-            ResolveGrowth();
-        }
 
         /// <summary>Lazy sibling binding — edit-mode tests never run OnEnable.</summary>
         private GrowableResource ResolveGrowth()
