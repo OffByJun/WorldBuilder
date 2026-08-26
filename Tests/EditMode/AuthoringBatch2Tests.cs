@@ -93,16 +93,16 @@ namespace WorldBuilder.Tests
                     ScatterRuleSetFactory.Create(kind, kind.ToString());
                 Assert.That(set.rules.Count, Is.GreaterThan(0));
 
-                if (kind != ScatterRuleSetFactory.EcologyKind.CaveInterior)
+                bool interiorLike = kind == ScatterRuleSetFactory.EcologyKind.CaveInterior ||
+                                    kind == ScatterRuleSetFactory.EcologyKind.FishSchools;
+                if (interiorLike)
+                    Assert.That(set.rules[0].biome, Is.EqualTo(BiomeType.Cave));
+                else
                 {
                     Assert.That(set.rules[0].useDepthGate, Is.True,
                         "underwater presets must gate by depth");
                     Assert.That(set.rules[0].maxFlowSpeed, Is.LessThan(999f),
                         "underwater presets must respect torrent zones");
-                }
-                else
-                {
-                    Assert.That(set.rules[0].biome, Is.EqualTo(BiomeType.Cave));
                 }
             }
         }
@@ -166,6 +166,44 @@ namespace WorldBuilder.Tests
             // Wall far from the tube stays solid.
             Assert.That(sampler.Sample(2f, 4f, 2f),
                 Is.GreaterThanOrEqualTo(SurfaceNetsMesher.IsoLevel));
+        }
+
+        // ---- Mid-water (cavity) scatter ----
+
+        [Test]
+        public void VolumeScatter_PlacesFishInCavityCenters()
+        {
+            VoxelStoreAsset store = BuildSolidStoreWithRoom(out Vector3 roomCenter);
+            var query = new VoxelVolumeQuery(new VoxelWorldSampler(store, 16f), 16f);
+
+            ScatterRuleSet set = ScriptableObject.CreateInstance<ScatterRuleSet>();
+            set.rules.Add(new ScatterRuleSet.Rule
+            {
+                name = "school",
+                prefabs = new List<GameObject> { new GameObject("Fish") },
+                densityPerSquareMeter = 0.5f
+            });
+
+            var volume = new Bounds(roomCenter, new Vector3(8f, 6f, 8f));
+            List<PcgPlacement> placements = VoxelVolumeScatter.GenerateMidWater(set, query, volume, seed: 3);
+            Assert.That(placements.Count, Is.GreaterThan(0));
+
+            foreach (PcgPlacement placement in placements)
+            {
+                // Cavity spans lattice [6..11); centers must float inside the room.
+                Assert.That(placement.Position.y, Is.InRange(6f, 11f),
+                    $"mid-water placement at {placement.Position}");
+                Assert.That(Vector3.Distance(placement.Position, roomCenter), Is.LessThanOrEqualTo(5f));
+            }
+        }
+
+        [Test]
+        public void ScatterFactory_FishSchoolsKindProducesRules()
+        {
+            ScatterRuleSet set = ScatterRuleSetFactory.Create(
+                ScatterRuleSetFactory.EcologyKind.FishSchools, "test");
+            Assert.That(set.rules.Count, Is.GreaterThan(0));
+            Assert.That(set.rules[0].biome, Is.EqualTo(BiomeType.Cave));
         }
 
         // ---- SeasonPalette ----

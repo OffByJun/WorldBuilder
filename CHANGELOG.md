@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.13.0 — Simulation Batch
+
+### 물리/시뮬레이션
+
+* **Rigidbody 부력** — `WaterDrifter`가 이제 리지드바디를 힘으로 조종
+  (`ComputeSteeringForce`: 목표 유속까지의 스티어링 포스). 충돌·적재·컨트레인트 유지,
+  트랜스폰모드는 기존 대로 선택 가능
+* **런타임 강 침식** — `RiverbedFlowSim`이 베이크된 강 세그먼트를 따라 예산화된 스탬프로
+  급류 지역은 깎고 유속 낮은 구간은 퇴적. `WaterLevelDriver` 날씨 배수가 침식률에 직결
+* **동굴 붕괴 감지** — `CaveStabilityAnalyzer.FindDetachedSolid`: 월드 바닥 행에서 고형 복셀을
+  플러드 필해 도달 불가능한 클러스터(공중 부양 지붕)를 탐지. 노드 예산 캡 + 샘플 위치 반환.
+  `CollapseWatcher`가 변형 이벤트를 스로틀 감시 → 경고/마커 프리팹/이벤트
+* **어군 스폰** — `IVolumeQuery.TryCavity`(공동 수직 중앙+클리어런스)와
+  `VoxelVolumeScatter.GenerateMidWater`, 팩토리 `FishSchools` 프리셋
+
+### 테스트
+
+* 스티어링 포스 수렴, 강 침식 밀도 총합 감소, 지지/무지지 슬래브 연결성, 공동 중앙 어군 배치 등 6건 추가
+
 ## 0.12.2 — Cross-Tool Entrances & Seasonal Bakes
 
 ### 블렌더 ↔ Unity 동굴 입구 정렬

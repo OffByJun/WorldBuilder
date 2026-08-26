@@ -204,11 +204,76 @@ namespace WorldBuilder.Runtime.Terrain
         /// </summary>
         bool TryFloor(Vector3 candidateTop, float maxDepth, out Vector3 floorPoint, out Vector3 normal);
 
+        /// <summary>
+        /// Finds the vertical middle of an air/water cavity below the candidate — where
+        /// swimming creatures belong. Clearance is the cavity height in meters.
+        /// </summary>
+        bool TryCavity(Vector3 candidateTop, float maxDepth, float minClearance,
+            out Vector3 cavityCenter, out float clearance);
+
         BiomeType BiomeAt(Vector3 position);
     }
 
     public static class VoxelVolumeScatter
     {
+        /// <summary>
+        /// Deterministic placements floating in the middle of cavities — fish schools in
+        /// flooded grottos, drifting spores in dry tunnels. Same rule semantics as floors.
+        /// </summary>
+        public static List<PcgPlacement> GenerateMidWater(ScatterRuleSet ruleSet, IVolumeQuery query,
+            Bounds volume, int seed)
+        {
+            if (ruleSet == null) throw new ArgumentNullException(nameof(ruleSet));
+            if (query == null) throw new ArgumentNullException(nameof(query));
+
+            var results = new List<PcgPlacement>();
+
+            for (int r = 0; r < ruleSet.rules.Count; r++)
+            {
+                ScatterRuleSet.Rule rule = ruleSet.rules[r];
+                if (rule == null || rule.prefabs == null || rule.prefabs.Count == 0) continue;
+                if (rule.densityPerSquareMeter <= 0f) continue;
+
+                float cellSize = Mathf.Sqrt(1f / rule.densityPerSquareMeter);
+                int cellsX = Mathf.Max(1, Mathf.CeilToInt(volume.size.x / cellSize));
+                int cellsZ = Mathf.Max(1, Mathf.CeilToInt(volume.size.z / cellSize));
+
+                for (int cz = 0; cz < cellsZ; cz++)
+                {
+                    for (int cx = 0; cx < cellsX; cx++)
+                    {
+                        var random = new Unity.Mathematics.Random(
+                            (uint)(seed ^ ((r + 31) * 73856093) ^ (cx * 19349663) ^ (cz * 83492791)));
+                        if (random.NextFloat() >=
+                            Mathf.Clamp01(rule.densityPerSquareMeter * cellSize * cellSize)) continue;
+
+                        float px = volume.min.x + (cx + random.NextFloat()) * cellSize;
+                        float pz = volume.min.z + (cz + random.NextFloat()) * cellSize;
+                        float topY = volume.max.y - random.NextFloat() * volume.size.y * 0.25f;
+
+                        const float minClearance = 1.5f;
+                        if (!query.TryCavity(new Vector3(px, topY, pz), 512f, minClearance,
+                                out Vector3 center, out float _)) continue;
+                        if (!volume.Contains(center)) continue;
+
+                        BiomeType biome = query.BiomeAt(center);
+                        if (!rule.anyBiome && biome != rule.biome) continue;
+
+                        results.Add(new PcgPlacement
+                        {
+                            Prefab = rule.prefabs[random.NextInt(0, rule.prefabs.Count)],
+                            Position = center,
+                            Rotation = Quaternion.Euler(0f, random.NextFloat() * 360f, 0f),
+                            Scale = Vector3.one *
+                                    Mathf.Lerp(rule.scaleRange.x, rule.scaleRange.y, random.NextFloat()),
+                            Biome = biome
+                        });
+                    }
+                }
+            }
+            return results;
+        }
+
         /// <summary>
         /// Deterministic placements on cavity floors inside the volume — ore veins, glow
         /// moss and bat roosts inside carved caves. Same rule semantics as the surface
@@ -332,6 +397,41 @@ namespace WorldBuilder.Runtime.Terrain
             biomes != null
                 ? biomes.SampleBiome(position.x, position.z, chunkSize)
                 : BiomeType.Forest;
+
+        public bool TryCavity(Vector3 candidateTop, float maxDepth, float minClearance,
+            out Vector3 cavityCenter, out float clearance)
+        {
+            cavityCenter = default;
+            clearance = 0f;
+            float spacing = chunkSize / SamplePointResolutionSafe;
+
+            float? airStartY = null;
+            for (float y = candidateTop.y - spacing; y >= candidateTop.y - maxDepth; y -= spacing)
+            {
+                bool solid = sampler.Sample(candidateTop.x, y, candidateTop.z) >= SurfaceNetsMesher.IsoLevel;
+
+                if (airStartY == null)
+                {
+                    if (!solid) airStartY = y;
+                    continue;
+                }
+                if (!solid) continue;
+
+                // Cavity ran from airStartY (top) down to this first solid row.
+                float top = airStartY.Value + spacing * 0.5f;
+                float bottom = y + spacing * 0.5f;
+                float height = top - bottom;
+                if (height < minClearance) { airStartY = null; continue; }
+
+                clearance = height;
+                cavityCenter = new Vector3(candidateTop.x, (top + bottom) * 0.5f, candidateTop.z);
+                return true;
+            }
+            return false;
+        }
+
+        // Sampler resolution accessor cached at construction.
+        private int SamplePointResolutionSafe => sampler.SamplePointResolution;
 
         private Vector3 DensityGradient(Vector3 position)
         {

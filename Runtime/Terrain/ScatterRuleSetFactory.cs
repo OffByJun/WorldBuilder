@@ -13,7 +13,9 @@ namespace WorldBuilder.Runtime.Terrain
         {
             CoralReef,
             KelpForest,
-            CaveInterior
+            CaveInterior,
+            /// <summary>Mid-water placements via VoxelVolumeScatter.GenerateMidWater (flooded grottos, submerged caverns).</summary>
+            FishSchools
         }
 
         public static ScatterRuleSet Create(EcologyKind kind, string assetName)
@@ -52,6 +54,14 @@ namespace WorldBuilder.Runtime.Terrain
                         density: 0.01f, maxSlope: 35f));
                     set.rules.Add(Rule("Stalagmite", biome: BiomeType.Cave,
                         density: 0.004f, maxSlope: 25f));
+                    break;
+
+                case EcologyKind.FishSchools:
+                    // Mid-water placement runs through VoxelVolumeScatter.GenerateMidWater.
+                    set.rules.Add(Rule("Fish School", biome: BiomeType.Cave,
+                        density: 0.0015f, maxSlope: 90f));
+                    set.rules.Add(Rule("Drifting Spores", biome: BiomeType.Cave,
+                        density: 0.003f, maxSlope: 90f));
                     break;
             }
             return set;

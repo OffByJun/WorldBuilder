@@ -62,6 +62,17 @@ namespace WorldBuilder.Runtime.Water
 
             return velocity;
         }
+
+        /// <summary>
+        /// Force that steers a dynamic body toward the drift-integrated velocity — lets
+        /// Rigidbody objects float and ride currents while still colliding normally.
+        /// </summary>
+        public static Vector3 ComputeSteeringForce(Vector3 currentVelocity, Vector3 targetVelocity,
+            float mass, float deltaTime)
+        {
+            if (mass <= 0f || deltaTime <= 0f) return Vector3.zero;
+            return (targetVelocity - currentVelocity) * (mass / deltaTime);
+        }
     }
 
     [System.Serializable]
