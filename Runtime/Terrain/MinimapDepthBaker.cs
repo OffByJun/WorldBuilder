@@ -96,7 +96,8 @@ namespace WorldBuilder.Runtime.Terrain
 
         private static float GroundY(VoxelWorldSampler sampler, float x, float z)
         {
-            for (float y = 45f; y >= -70f; y -= 1f)
+            // Start high enough for mountainous terrain; the march is cheap.
+            for (float y = 120f; y >= -70f; y -= 1f)
             {
                 if (sampler.Sample(x, y, z) >= SurfaceNetsMesher.IsoLevel) return y - 1.5f;
             }

@@ -112,14 +112,26 @@ namespace WorldBuilder.Runtime.Terrain
         /// <summary>
         /// Raw spherical stamp without journal/event bookkeeping — for bulk authoring
         /// operations (riverbed carving, cave entrances) that report once at the end.
+        /// Uses a thread-local scratch set, so it is safe inside parallel passes and does
+        /// not allocate per call.
         /// </summary>
         public static int StampSphere(VoxelStoreAsset store, float chunkSize, Vector3 center,
             float radius, float delta)
         {
             if (store == null) throw new ArgumentNullException(nameof(store));
             if (radius <= 0f) return 0;
-            return ApplySphere(store, chunkSize, center, radius, delta, new HashSet<Vector3Int>());
+
+            HashSet<Vector3Int> scratch = scratchSet;
+            if (scratch == null)
+            {
+                scratch = new HashSet<Vector3Int>();
+                scratchSet = scratch;
+            }
+            scratch.Clear();
+            return ApplySphere(store, chunkSize, center, radius, delta, scratch);
         }
+
+        [ThreadStatic] private static HashSet<Vector3Int> scratchSet;
 
         private static int ApplySphere(VoxelStoreAsset store, float chunkSize, Vector3 center,
             float radius, float delta, HashSet<Vector3Int> touched)

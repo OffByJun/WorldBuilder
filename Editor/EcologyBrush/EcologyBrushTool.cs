@@ -193,12 +193,19 @@ namespace WorldBuilder.Editor.EcologyBrush
         /// <summary>Grounds candidates against scene colliders and reads the biome map.</summary>
         private sealed class SurfaceQuery
         {
+            private const float ChunkSize = 128f;
             private readonly HighResBiomeMap biomes;
 
             public SurfaceQuery(Vector3 seedPoint)
             {
-                biomes = AssetDatabase.LoadAssetAtPath<HighResBiomeMap>(
-                    "Assets/WorldBuilderGenerated/Terrain/HighResBiomeMap.asset");
+                // Locate any biome map asset rather than assuming one fixed path.
+                string[] guids = AssetDatabase.FindAssets("t:HighResBiomeMap");
+                foreach (string guid in guids)
+                {
+                    biomes = AssetDatabase.LoadAssetAtPath<HighResBiomeMap>(
+                        AssetDatabase.GUIDToAssetPath(guid));
+                    if (biomes != null) return;
+                }
                 _ = seedPoint;
             }
 
@@ -215,7 +222,7 @@ namespace WorldBuilder.Editor.EcologyBrush
             }
 
             public BiomeType BiomeAt(Vector3 position) =>
-                biomes != null ? biomes.SampleBiome(position.x, position.z, 128f) : BiomeType.Forest;
+                biomes != null ? biomes.SampleBiome(position.x, position.z, ChunkSize) : BiomeType.Forest;
         }
     }
 }

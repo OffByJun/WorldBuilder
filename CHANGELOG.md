@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.16.1 — Stabilization
+
+### 수정
+
+* `WaterDrifter` — `RequireComponent(Rigidbody)` 제거(트랜스폰 모드 사용자 회귀).
+  Rigidbody는 지연 해석되며, 부재 시 한 번만 경고하고 트랜스폰 이동으로 안전 폴백
+* `WaterSplashFx` — OnDisable에서 립플 머티리얼 해제(에디터 누수)
+* `MinimapDepthBaker.GroundY` — 스캔 시작을 120 m로 상향해 고산 지형에서 동굴 오버레이 오탐 제거
+* 생태 브러시가 하드코딩된 바이옴 맵 경로 대신 프로젝트 검색으로 전환
+* `TerrainDeformer.StampSphere` — [ThreadStatic] 스크래치 셋 재사용으로 대량 카빙 시 할당 제거
+  (메시 카빙·입구 관통·강 침식 경로)
+
+### 회귀 테스트 (6건 추가)
+
+* 월드 시드 Export→Import 전 필드 왕복 + 핑거프린트 안정성/민감도, 미지원 스키마 거부
+* 지하수대 위 authored 바다 우선순위 유지
+* 낚시 마른 땅 캐스트 거부 / 수중 캐스트 세션 시작
+* 세이브 Delete가 메인+terrain+extras 사이드카를 함께 제거
+* 스트리밍 프리셋 반경/주기 상식 범위 + 서버>핸드헬드 불변
+
 ## 0.16.0 — Gameplay Interaction Batch
 
 ### 낚시

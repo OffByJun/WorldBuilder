@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace WorldBuilder.Runtime.Water
 {
@@ -9,40 +9,52 @@ namespace WorldBuilder.Runtime.Water
     /// <see cref="WaterDrift.Integrate"/>.
     /// </summary>
     [DisallowMultipleComponent]
-    [RequireComponent(typeof(Rigidbody))]
     public sealed class WaterDrifter : MonoBehaviour
     {
         [SerializeField] private DriftParams parameters = DriftParams.Default;
         [SerializeField] private bool simulate = true;
         [SerializeField] private float maxSpeed = 12f;
-        [Tooltip("Apply drift as physics forces on the attached Rigidbody instead of moving the transform.")]
+        [Tooltip("Apply drift as physics forces on an attached Rigidbody instead of moving the transform. Requires a Rigidbody component.")]
         [SerializeField] private bool driveRigidbody = true;
 
         private Vector3 velocity;
         private WaterSample lastSample = WaterSample.Air;
         private Rigidbody body;
+        private bool bodyResolved;
+        private bool warnedNoBody;
+
+        private bool UsesRigidbody => driveRigidbody && Body != null;
 
         /// <summary>Injected by gameplay bootstrap; null keeps the drifter idle.</summary>
         public IWaterQueryService QueryService { get; set; }
 
         public ref DriftParams Parameters => ref parameters;
 
+        /// <summary>Attached rigidbody, resolved lazily (transform-mode users may have none).</summary>
+        public Rigidbody Body
+        {
+            get
+            {
+                if (!bodyResolved)
+                {
+                    body = GetComponent<Rigidbody>();
+                    bodyResolved = true;
+                }
+                return body;
+            }
+        }
+
         public Vector3 Velocity
         {
-            get => body != null && driveRigidbody ? body.linearVelocity : velocity;
+            get => UsesRigidbody ? body.linearVelocity : velocity;
             set
             {
-                if (body != null && driveRigidbody) body.linearVelocity = value;
+                if (UsesRigidbody) body.linearVelocity = value;
                 else velocity = value;
             }
         }
 
         public WaterSample LastSample => lastSample;
-
-        private void Awake()
-        {
-            body = GetComponent<Rigidbody>();
-        }
 
         private void OnEnable()
         {
@@ -58,18 +70,25 @@ namespace WorldBuilder.Runtime.Water
         {
             if (!simulate || QueryService == null) return;
 
-            Vector3 probePosition = body != null && driveRigidbody ? body.position : transform.position;
+            if (driveRigidbody && Body == null && !warnedNoBody)
+            {
+                warnedNoBody = true;
+                Debug.LogWarning($"[WaterDrifter] '{name}' has no Rigidbody — falling back to " +
+                                 "transform movement. Add one for physics-driven buoyancy.");
+            }
+
+            Vector3 probePosition = UsesRigidbody ? body.position : transform.position;
             WaterSample sample = QueryService.Sample(probePosition);
             lastSample = sample;
 
-            Vector3 currentVelocity = body != null && driveRigidbody
+            Vector3 currentVelocity = UsesRigidbody
                 ? body.linearVelocity
                 : velocity;
             Vector3 targetVelocity = WaterDrift.Integrate(probePosition, currentVelocity, sample,
                 parameters, Time.fixedDeltaTime);
             targetVelocity = Vector3.ClampMagnitude(targetVelocity, Mathf.Max(0.01f, maxSpeed));
 
-            if (body != null && driveRigidbody)
+            if (UsesRigidbody)
             {
                 // Steer the dynamic body toward the integrated velocity with real forces,
                 // so collisions, stacking and constraints keep working.

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 using WorldBuilder.Runtime.Water;
@@ -8,7 +8,7 @@ namespace WorldBuilder.Runtime.Fx
     /// <summary>
     /// Spawns a splash particle burst and an expanding surface ripple when its body enters
     /// or leaves water. Pairs with <see cref="WaterDrifter"/> (reads LastSample) but works
-    /// standalone with any injected sampler function. Ripples are procedural annuli — no
+    /// standalone with any injected sampler function. Ripples are procedural annuli ??no
     /// art assets required.
     /// </summary>
     [DisallowMultipleComponent]
@@ -44,6 +44,12 @@ namespace WorldBuilder.Runtime.Fx
             foreach (Ripple ripple in active)
                 if (ripple.view != null) Destroy(ripple.view);
             active.Clear();
+
+            if (rippleMaterial != null)
+            {
+                Destroy(rippleMaterial);
+                rippleMaterial = null;
+            }
         }
 
         private void LateUpdate()

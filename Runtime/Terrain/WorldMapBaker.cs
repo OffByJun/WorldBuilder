@@ -39,11 +39,10 @@ namespace WorldBuilder.Runtime.Terrain
                     float wx = originXz.x + px * step;
                     float wz = originXz.y + pz * step;
                     Color tint = biomeMap.SampleColor(wx, wz, chunkSize);
-                    pixel = Color32.Lerp(pixel,
-                        new Color32((byte)(pixel.r * 0.55f + tint.r * 255f * 0.45f),
-                            (byte)(pixel.g * 0.55f + tint.g * 255f * 0.45f),
-                            (byte)(pixel.b * 0.55f + tint.b * 255f * 0.45f), 255),
-                        1f);
+                    pixel = new Color32(
+                        (byte)(pixel.r * 0.55f + tint.r * 255f * 0.45f),
+                        (byte)(pixel.g * 0.55f + tint.g * 255f * 0.45f),
+                        (byte)(pixel.b * 0.55f + tint.b * 255f * 0.45f), 255);
                 }
 
                 if (caves != null && caves[i].a > 0)
