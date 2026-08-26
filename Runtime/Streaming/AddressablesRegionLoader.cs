@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
+using UnityEngine.ResourceManagement.AsyncOperations;
 using WorldBuilder.Runtime.Grid;
 
 namespace WorldBuilder.Runtime.Streaming

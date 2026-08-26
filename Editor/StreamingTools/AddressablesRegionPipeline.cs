@@ -28,7 +28,7 @@ namespace WorldBuilder.Editor.StreamingTools
         public static string PrepareGroups(WorldGridSettings grid)
         {
             if (grid == null) throw new ArgumentNullException(nameof(grid));
-            var settings = AddressableAssetSettings.DefaultObject;
+            var settings = AddressableAssetSettingsDefaultObject.Settings;
             if (settings == null)
                 throw new InvalidOperationException(
                     "No AddressableAssetSettings found. Enable Addressables in the project first.");
@@ -44,7 +44,7 @@ namespace WorldBuilder.Editor.StreamingTools
             {
                 string regionName = Path.GetFileName(directory);
                 AddressableAssetGroup group = settings.FindGroup(GroupPrefix + regionName)
-                    ?? settings.CreateGroup(GroupPrefix + regionName, setAsDefault: false,
+                    ?? settings.CreateGroup(GroupPrefix + regionName, setAsDefaultGroup: false,
                         readOnly: false, postEvent: true,
                         schemasToCopy: null);
                 EnsureBundledSchema(group);
@@ -69,7 +69,7 @@ namespace WorldBuilder.Editor.StreamingTools
 
         public static string BuildContent()
         {
-            var settings = AddressableAssetSettings.DefaultObject;
+            var settings = AddressableAssetSettingsDefaultObject.Settings;
             if (settings == null) throw new InvalidOperationException("Addressables not enabled.");
 
             // BuildPlayerContent has shifted between versions/static-instance forms;

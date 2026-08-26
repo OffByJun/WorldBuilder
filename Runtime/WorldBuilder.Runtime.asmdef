@@ -2,11 +2,13 @@
     "name": "WorldBuilder.Runtime",
     "rootNamespace": "WorldBuilder.Runtime",
     "references": [
+        "Unity.Addressables",
         "Unity.Burst",
         "Unity.Collections",
         "Unity.Jobs",
         "Unity.Mathematics",
         "Unity.RenderPipelines.Core.Runtime",
+        "Unity.ResourceManager",
         "UnityEngine.UI"
     ],
     "includePlatforms": [],

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.17.1 -- Packaging Fix (Blender)
+
+* Extension layout fix: Blender 4.3+ validation requires a root __init__.py next to blender_manifest.toml. Added lifecycle-forwarding entry point; validate/install-file now pass on Blender 5.1.
+* Added BlenderAddon/tools/build_zip.ps1 (manifest-versioned zip build, excludes __pycache__/*.meta).
+* .gitignore: exclude BlenderAddon/*.zip artifacts.
+
 ## 0.17.0 — World Change & Extensibility
 
 ### 월드 변화

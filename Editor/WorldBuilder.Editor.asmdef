@@ -7,6 +7,8 @@
         "WorldBuilder.Baking",
         "WorldBuilder.Entities",
         "WorldBuilder.Entities.Authoring",
+        "Unity.Addressables",
+        "Unity.Addressables.Editor",
         "Unity.Mathematics",
         "Unity.Splines"
     ],
