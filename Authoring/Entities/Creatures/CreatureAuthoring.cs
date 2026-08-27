@@ -220,13 +220,13 @@ namespace WorldBuilder.Entities.Creatures.Authoring
                 in CreatureAppearance appearance)
             {
                 Renderer[] renderers = GetComponentsInChildren<Renderer>();
-                DynamicBuffer<CreatureAppearanceTarget> targets = AddBuffer<CreatureAppearanceTarget>(root);
+                AddBuffer<CreatureAppearanceTarget>(root);
                 for (int i = 0; i < renderers.Length; i++)
                 {
                     Renderer renderer = renderers[i];
                     if (renderer == null) continue;
                     Entity target = GetEntity(renderer.gameObject, TransformUsageFlags.Renderable);
-                    if (target == Entity.Null) continue;
+                    if (target == Entity.Null || target != root) continue;
 
                     AddComponent(target, new CreaturePrimaryColor { Value = appearance.Primary });
                     AddComponent(target, new CreatureSecondaryColor { Value = appearance.Secondary });
@@ -237,11 +237,9 @@ namespace WorldBuilder.Entities.Creatures.Authoring
                         Value = CreatureAppearanceRules.PatternParameters(appearance)
                     });
 
-                    if (target == root) continue;
-                    AddComponent(target, appearance);
-                    AddComponent<CreatureAppearanceDirty>(target);
-                    SetComponentEnabled<CreatureAppearanceDirty>(target, true);
-                    targets.Add(new CreatureAppearanceTarget { Value = target });
+                    // A Baker may only mutate its primary entity and additional entities it
+                    // created. Child renderer entities belong to their own authoring objects;
+                    // attempting to add material properties to them aborts prefab baking.
                 }
             }
 
