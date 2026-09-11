@@ -29,7 +29,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
         }
 
         [BurstCompile]
-        [WithDisabled(typeof(CreatureCaptured))]
+        [WithOptions(EntityQueryOptions.IgnoreComponentEnabledState)]
         private partial struct SwimJob : IJobEntity
         {
             public float DeltaTime;
@@ -38,8 +38,10 @@ namespace WorldBuilder.Entities.Creatures.Systems
 
             private void Execute(ref LocalTransform transform, ref CreatureSwim swim, ref CreatureRandom seed,
                 in CreatureAlarm alarm, in CreatureMoveOrder order, EnabledRefRO<CreatureMoveOrder> hasOrder,
-                in WorldEntityActive active)
+                EnabledRefRO<CreatureCaptured> captured, EnabledRefRO<WorldEntityActive> active)
             {
+                if (captured.ValueRO || !active.ValueRO) return;
+
                 bool alarmed = CreatureTamingRules.IsAlarmed(alarm, ElapsedTime);
                 float speed = swim.CruiseSpeed;
 

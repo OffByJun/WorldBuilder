@@ -79,6 +79,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 {
                     RequestId = request.RequestId,
                     Target = request.Target,
+                    ItemId = request.ItemId,
                     Failure = CreatureFeedFailure.None,
                     Affinity = affinity.Value,
                     MaximumAffinity = affinity.MaximumValue,
@@ -119,6 +120,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
             {
                 RequestId = request.RequestId,
                 Target = request.Target,
+                ItemId = request.ItemId,
                 Failure = failure
             };
 
@@ -128,6 +130,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
             {
                 RequestId = request.RequestId,
                 Target = request.Target,
+                ItemId = request.ItemId,
                 Failure = failure,
                 Affinity = affinity.Value,
                 MaximumAffinity = affinity.MaximumValue,

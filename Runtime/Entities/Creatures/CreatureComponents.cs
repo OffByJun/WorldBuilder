@@ -317,6 +317,7 @@ namespace WorldBuilder.Entities.Creatures
     {
         public uint RequestId;
         public Entity Target;
+        public int ItemId;
         public CreatureFeedFailure Failure;
         public float Affinity;
         public float MaximumAffinity;
