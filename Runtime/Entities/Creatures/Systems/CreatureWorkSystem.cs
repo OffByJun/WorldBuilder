@@ -224,9 +224,29 @@ namespace WorldBuilder.Entities.Creatures.Systems
             if (elapsed < work.ValueRO.PhaseEndTime) return;
 
             CreatureWorkSite site = entityManager.GetComponentData<CreatureWorkSite>(siteEntity);
+            float unitWeight = ResolveItemWeight(entityManager, runtime, site.OutputItemId);
+            CreatureCarryCapacity carry = entityManager.HasComponent<CreatureCarryCapacity>(worker)
+                ? entityManager.GetComponentData<CreatureCarryCapacity>(worker)
+                : new CreatureCarryCapacity
+                {
+                    MaximumWeight = math.max(1, settlement.ValueRO.CarryCapacity),
+                    SlotCount = (ushort)math.max(1, settlement.ValueRO.CarryCapacity)
+                };
             work.ValueRW.CarriedItemId = site.OutputItemId;
-            work.ValueRW.CarriedCount = math.min(math.max(0, site.OutputCount),
-                math.max(1, settlement.ValueRO.CarryCapacity));
+            work.ValueRW.CarriedCount = CreatureCarryRules.MaximumUnits(carry.MaximumWeight, unitWeight,
+                math.min(carry.SlotCount, math.max(1, settlement.ValueRO.CarryCapacity)), site.OutputCount);
+            work.ValueRW.CarriedUnitWeight = unitWeight;
+
+            // Do not consume a work site when this species cannot lift even one output item.
+            if (work.ValueRW.CarriedCount <= 0)
+            {
+                site.State = CreatureWorkSiteState.Ready;
+                site.Claimant = Entity.Null;
+                entityManager.SetComponentData(siteEntity, site);
+                entityManager.SetComponentEnabled<CreatureWorkSiteReady>(siteEntity, true);
+                Abort(work, order);
+                return;
+            }
 
             site.State = CreatureWorkSiteState.Spent;
             site.Claimant = Entity.Null;
@@ -309,6 +329,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
 
             work.ValueRW.CarriedItemId = -1;
             work.ValueRW.CarriedCount = 0;
+            work.ValueRW.CarriedUnitWeight = 0f;
             work.ValueRW.Site = Entity.Null;
             work.ValueRW.Delivery = Entity.Null;
             work.ValueRW.Phase = CreatureWorkPhase.Return;
@@ -321,6 +342,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
             work.ValueRW.Delivery = Entity.Null;
             work.ValueRW.CarriedItemId = -1;
             work.ValueRW.CarriedCount = 0;
+            work.ValueRW.CarriedUnitWeight = 0f;
             work.ValueRW.Phase = CreatureWorkPhase.Idle;
         }
 
@@ -331,6 +353,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
             work.ValueRW.Delivery = Entity.Null;
             work.ValueRW.CarriedItemId = -1;
             work.ValueRW.CarriedCount = 0;
+            work.ValueRW.CarriedUnitWeight = 0f;
             work.ValueRW.Phase = CreatureWorkPhase.Idle;
         }
 
@@ -376,6 +399,15 @@ namespace WorldBuilder.Entities.Creatures.Systems
             }
 
             return match != Entity.Null ? match : fallback;
+        }
+
+        private static float ResolveItemWeight(EntityManager entityManager, Entity runtime, int itemId)
+        {
+            if (runtime == Entity.Null || !entityManager.HasBuffer<CreatureItemWeight>(runtime)) return 1f;
+            DynamicBuffer<CreatureItemWeight> weights = entityManager.GetBuffer<CreatureItemWeight>(runtime, true);
+            for (int i = 0; i < weights.Length; i++)
+                if (weights[i].ItemId == itemId) return math.max(.01f, weights[i].Weight);
+            return 1f;
         }
 
         private static int Deposit(DynamicBuffer<CreatureStorageSlot> slots, in CreatureStorage storage,

@@ -77,6 +77,37 @@ namespace WorldBuilder.Entities.Creatures
         public int BaseCarryCapacity;
     }
 
+    /// <summary>Physical limits are independent from work speed and can grow to multiple slots.</summary>
+    public struct CreatureCarryCapacity : IComponentData
+    {
+        public float MaximumWeight;
+        public ushort SlotCount;
+    }
+
+    [InternalBufferCapacity(2)]
+    public struct CreatureCarriedItem : IBufferElementData
+    {
+        public int ItemId;
+        public float UnitWeight;
+        public ushort SocketIndex;
+    }
+
+    [InternalBufferCapacity(2)]
+    public struct CreatureCarrySocket : IBufferElementData
+    {
+        public FixedString32Bytes Name;
+        public float3 LocalPosition;
+        public quaternion LocalRotation;
+        public float3 LocalScale;
+    }
+
+    [InternalBufferCapacity(32)]
+    public struct CreatureItemWeight : IBufferElementData
+    {
+        public int ItemId;
+        public float Weight;
+    }
+
     public struct CreatureCustomized : IComponentData, IEnableableComponent { }
 
     public struct CreatureSettlement : IComponentData
@@ -97,6 +128,7 @@ namespace WorldBuilder.Entities.Creatures
         public Entity Delivery;
         public int CarriedItemId;
         public int CarriedCount;
+        public float CarriedUnitWeight;
         public double PhaseEndTime;
     }
 
@@ -214,5 +246,15 @@ namespace WorldBuilder.Entities.Creatures
         public int ItemId;
         public int Count;
         public int Accepted;
+    }
+
+    public static class CreatureCarryRules
+    {
+        public static int MaximumUnits(float maximumWeight, float unitWeight, int slotCount, int available)
+        {
+            if (maximumWeight <= 0f || unitWeight <= 0f || slotCount <= 0 || available <= 0) return 0;
+            int byWeight = (int)math.floor(maximumWeight / unitWeight + 1e-5f);
+            return math.min(available, math.min(slotCount, math.max(0, byWeight)));
+        }
     }
 }
