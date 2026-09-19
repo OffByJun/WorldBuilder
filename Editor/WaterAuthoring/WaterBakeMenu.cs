@@ -5,6 +5,7 @@ using WorldBuilder.Authoring.Water;
 using WorldBuilder.Baking.Core;
 using WorldBuilder.Baking.Water;
 using WorldBuilder.Runtime.Grid;
+using WorldBuilder.Runtime.Zones;
 
 namespace WorldBuilder.Editor.WaterAuthoring
 {
@@ -18,7 +19,9 @@ namespace WorldBuilder.Editor.WaterAuthoring
             WaterBodyAuthoring[] found = Object.FindObjectsByType<WaterBodyAuthoring>(
                 FindObjectsInactive.Include, FindObjectsSortMode.None);
             List<WaterBodyAuthoring> bodies = new List<WaterBodyAuthoring>(found);
-            WaterBakeStep waterStep = new WaterBakeStep(bodies);
+            WaterCurrentZone[] currentZones = Object.FindObjectsByType<WaterCurrentZone>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None);
+            WaterBakeStep waterStep = new WaterBakeStep(bodies, currentZones);
             WorldBakeContext context = new WorldBakeContext(settings);
             WorldBakeReport report = new WorldBakePipeline(new IWorldBakeStep[] { waterStep }).Run(context);
             Log(report);

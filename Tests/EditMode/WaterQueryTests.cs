@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using WorldBuilder.Authoring.Water;
+using WorldBuilder.Baking.Core;
 using WorldBuilder.Baking.Water;
 using WorldBuilder.Runtime.Grid;
 using WorldBuilder.Runtime.Water;
@@ -79,6 +80,52 @@ namespace WorldBuilder.Tests
             Assert.That(first.Data.DeterministicHash, Is.EqualTo(second.Data.DeterministicHash));
             Object.DestroyImmediate(first.Data);
             Object.DestroyImmediate(second.Data);
+        }
+
+        [Test]
+        public void BakeStep_IncludesCurrentDataAndProducesDeterministicOutput()
+        {
+            OceanWaterBody ocean = Add<OceanWaterBody>("ocean", Vector3.zero);
+            ocean.SeaLevel = 0f;
+            RiverWaterBody river = Add<RiverWaterBody>("river", new Vector3(64f, 0f, 0f));
+            WaterCurrentZone zone = AddZone("current", new Vector3(0f, -4f, 0f),
+                new Vector3(10f, 8f, 10f), Vector3.down, 6f, priority: 50);
+            WaterBakeStep first = new WaterBakeStep(new WaterBodyAuthoring[] { ocean, river }, new[] { zone });
+            WaterBakeStep second = new WaterBakeStep(new WaterBodyAuthoring[] { river, ocean }, new[] { zone });
+            WaterBakeStep withoutCurrents = new WaterBakeStep(new WaterBodyAuthoring[] { ocean, river });
+            WorldBakeContext firstContext = new WorldBakeContext(settings);
+            WorldBakeContext secondContext = new WorldBakeContext(settings);
+            WorldBakeContext withoutCurrentsContext = new WorldBakeContext(settings);
+            try
+            {
+                Assert.That(new WorldBakePipeline(new IWorldBakeStep[] { first }).Run(firstContext).HasErrors, Is.False);
+                Assert.That(new WorldBakePipeline(new IWorldBakeStep[] { second }).Run(secondContext).HasErrors, Is.False);
+                Assert.That(new WorldBakePipeline(new IWorldBakeStep[] { withoutCurrents }).Run(withoutCurrentsContext).HasErrors, Is.False);
+
+                foreach (WaterBakeStep step in new[] { first, second })
+                {
+                    WaterQueryService query = new WaterQueryService(step.Result);
+                    WaterSample inside = query.Sample(zone.transform.position);
+                    Assert.That(inside.IsInWater, Is.True);
+                    Assert.That(inside.FlowDirection, Is.EqualTo(Vector3.down));
+                    Assert.That(inside.FlowSpeed, Is.EqualTo(6f).Within(1e-4));
+                    Assert.That(query.Sample(new Vector3(32f, -4f, 0f)).FlowSpeed, Is.Zero);
+                }
+
+                Assert.That(firstContext.DeterministicOutputs[first.StableId], Is.EqualTo(first.Result.DeterministicHash));
+                Assert.That(secondContext.DeterministicOutputs[second.StableId], Is.EqualTo(second.Result.DeterministicHash));
+                Assert.That(first.Result.DeterministicHash, Is.EqualTo(second.Result.DeterministicHash));
+                Assert.That(firstContext.BuildOutputHash(), Is.EqualTo(secondContext.BuildOutputHash()));
+                Assert.That(first.Result.DeterministicHash, Is.Not.EqualTo(withoutCurrents.Result.DeterministicHash));
+                Assert.That(firstContext.BuildOutputHash(), Is.Not.EqualTo(withoutCurrentsContext.BuildOutputHash()));
+                Assert.That(new WaterQueryService(withoutCurrents.Result).Sample(zone.transform.position).FlowSpeed, Is.Zero);
+            }
+            finally
+            {
+                if (first.Result != null) Object.DestroyImmediate(first.Result);
+                if (second.Result != null) Object.DestroyImmediate(second.Result);
+                if (withoutCurrents.Result != null) Object.DestroyImmediate(withoutCurrents.Result);
+            }
         }
 
         [Test]
