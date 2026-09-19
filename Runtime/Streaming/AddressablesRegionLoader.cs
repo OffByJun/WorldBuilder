@@ -20,8 +20,8 @@ namespace WorldBuilder.Runtime.Streaming
     {
         private readonly DirectRegionCatalog existenceCatalog;
         private readonly Transform parent;
-        private readonly Dictionary<RegionCoord, AsyncOperationHandle<GameObject>> handles =
-            new Dictionary<RegionCoord, AsyncOperationHandle<GameObject>>();
+        private readonly Dictionary<LoadedRegion, AsyncOperationHandle<GameObject>> handles =
+            new Dictionary<LoadedRegion, AsyncOperationHandle<GameObject>>();
 
         public Func<RegionCoord, string> AddressResolver { get; set; } = WorldCoordNaming.RegionName;
 
@@ -38,34 +38,45 @@ namespace WorldBuilder.Runtime.Streaming
 
         public async Task<LoadedRegion> LoadAsync(RegionCoord coordinate, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             string address = AddressResolver(coordinate);
             AsyncOperationHandle<GameObject> handle = Addressables.LoadAssetAsync<GameObject>(address);
-            while (!handle.IsDone)
+            GameObject root = null;
+            try
             {
-                if (cancellationToken.IsCancellationRequested)
+                while (!handle.IsDone)
                 {
-                    Addressables.Release(handle);
                     cancellationToken.ThrowIfCancellationRequested();
+                    await Task.Yield();
                 }
-                await Task.Yield();
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (handle.Status != AsyncOperationStatus.Succeeded)
+                    throw new KeyNotFoundException($"No Addressables asset for region '{address}'.");
+
+                root = UnityEngine.Object.Instantiate(handle.Result, parent);
+                root.name = WorldCoordNaming.RegionName(coordinate);
+                cancellationToken.ThrowIfCancellationRequested();
+                LoadedRegion region = new LoadedRegion(coordinate, root);
+                handles.Add(region, handle);
+                return region;
             }
-
-            if (handle.Status != AsyncOperationStatus.Succeeded)
-                throw new KeyNotFoundException($"No Addressables asset for region '{address}'.");
-
-            GameObject root = UnityEngine.Object.Instantiate(handle.Result, parent);
-            root.name = WorldCoordNaming.RegionName(coordinate);
-            handles[coordinate] = handle;
-            return new LoadedRegion(coordinate, root);
+            catch
+            {
+                if (root != null) UnityEngine.Object.Destroy(root);
+                Addressables.Release(handle);
+                throw;
+            }
         }
 
         public Task UnloadAsync(LoadedRegion region, CancellationToken cancellationToken)
         {
-            if (region?.Root != null) UnityEngine.Object.Destroy(region.Root);
-            if (region != null && handles.TryGetValue(region.Coordinate, out AsyncOperationHandle<GameObject> handle))
+            cancellationToken.ThrowIfCancellationRequested();
+            if (region != null && handles.TryGetValue(region, out AsyncOperationHandle<GameObject> handle))
             {
+                if (region.Root != null) UnityEngine.Object.Destroy(region.Root);
                 Addressables.Release(handle);
-                handles.Remove(region.Coordinate);
+                handles.Remove(region);
             }
             return Task.CompletedTask;
         }

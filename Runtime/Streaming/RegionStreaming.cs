@@ -68,6 +68,7 @@ namespace WorldBuilder.Runtime.Streaming
         private readonly IRegionContentLoader loader;
         private readonly IRegionSetObserver observer;
         private readonly Dictionary<RegionCoord, LoadedRegion> loaded = new Dictionary<RegionCoord, LoadedRegion>();
+        private readonly SemaphoreSlim operationGate = new SemaphoreSlim(1, 1);
 
         public ChunkStreamingService(WorldGridSettings settings, IRegionContentLoader loader,
             IRegionSetObserver observer = null)
@@ -81,6 +82,20 @@ namespace WorldBuilder.Runtime.Streaming
         public bool IsChunkLoaded(ChunkCoord coordinate) => IsRegionLoaded(grid.ChunkToRegion(coordinate));
 
         public async Task SetFocusAsync(Vector3 worldPosition, int regionRadius, CancellationToken cancellationToken)
+        {
+            await operationGate.WaitAsync(cancellationToken);
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await SetFocusCoreAsync(worldPosition, regionRadius, cancellationToken);
+            }
+            finally
+            {
+                operationGate.Release();
+            }
+        }
+
+        private async Task SetFocusCoreAsync(Vector3 worldPosition, int regionRadius, CancellationToken cancellationToken)
         {
             regionRadius = Mathf.Max(0, regionRadius);
             RegionCoord center = grid.WorldToRegion(worldPosition);
@@ -104,33 +119,66 @@ namespace WorldBuilder.Runtime.Streaming
             foreach (RegionCoord coordinate in loaded.Keys)
                 if (!desiredSet.Contains(coordinate)) unload.Add(coordinate);
             unload.Sort();
-            for (int i = 0; i < unload.Count; i++)
+            bool changed = false;
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                LoadedRegion region = loaded[unload[i]];
-                await loader.UnloadAsync(region, cancellationToken);
-                loaded.Remove(unload[i]);
-            }
+                for (int i = 0; i < unload.Count; i++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    LoadedRegion region = loaded[unload[i]];
+                    await loader.UnloadAsync(region, CancellationToken.None);
+                    loaded.Remove(unload[i]);
+                    changed = true;
+                }
 
-            for (int i = 0; i < desired.Count; i++)
+                for (int i = 0; i < desired.Count; i++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    RegionCoord coordinate = desired[i];
+                    if (!loaded.ContainsKey(coordinate))
+                    {
+                        LoadedRegion region = await loader.LoadAsync(coordinate, cancellationToken);
+                        loaded.Add(coordinate, region);
+                        changed = true;
+                    }
+                }
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            finally
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                RegionCoord coordinate = desired[i];
-                if (!loaded.ContainsKey(coordinate))
-                    loaded.Add(coordinate, await loader.LoadAsync(coordinate, cancellationToken));
+                if (changed) NotifyLoadedRegions();
             }
-
-            NotifyLoadedRegions();
         }
 
         public async Task UnloadAllAsync(CancellationToken cancellationToken)
         {
-            List<RegionCoord> coordinates = new List<RegionCoord>(loaded.Keys);
-            coordinates.Sort();
-            for (int i = 0; i < coordinates.Count; i++)
-                await loader.UnloadAsync(loaded[coordinates[i]], cancellationToken);
-            loaded.Clear();
-            NotifyLoadedRegions();
+            await operationGate.WaitAsync(cancellationToken);
+            bool changed = false;
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                List<RegionCoord> coordinates = new List<RegionCoord>(loaded.Keys);
+                coordinates.Sort();
+                for (int i = 0; i < coordinates.Count; i++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await loader.UnloadAsync(loaded[coordinates[i]], CancellationToken.None);
+                    loaded.Remove(coordinates[i]);
+                    changed = true;
+                }
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            finally
+            {
+                try
+                {
+                    if (changed) NotifyLoadedRegions();
+                }
+                finally
+                {
+                    operationGate.Release();
+                }
+            }
         }
 
         private bool ContainsAll(HashSet<RegionCoord> desiredSet)

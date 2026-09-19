@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using UnityEngine;
 
 namespace WorldBuilder.Runtime.Streaming
@@ -63,6 +64,8 @@ namespace WorldBuilder.Runtime.Streaming
         [SerializeField] private Transform focusOverride;
 
         private float timer;
+        private bool updatingFocus;
+        private CancellationTokenSource focusCancellation;
 
         public StreamingBudgetPreset Preset
         {
@@ -82,20 +85,37 @@ namespace WorldBuilder.Runtime.Streaming
             set => focusOverride = value;
         }
 
-        private void Update()
+        private async void Update()
         {
             if (preset == null || service == null || FocusTarget == null) return;
 
             timer += Time.unscaledDeltaTime;
-            if (timer < preset.focusIntervalSeconds) return;
+            if (updatingFocus || timer < preset.focusIntervalSeconds) return;
             timer = 0f;
+            updatingFocus = true;
+            focusCancellation = CancellationTokenSource.CreateLinkedTokenSource(destroyCancellationToken);
+            try
+            {
+                await service.SetFocusAsync(FocusTarget.position, preset.regionRadius, focusCancellation.Token);
+            }
+            catch (OperationCanceledException) when (focusCancellation.IsCancellationRequested)
+            {
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+            }
+            finally
+            {
+                focusCancellation.Dispose();
+                focusCancellation = null;
+                updatingFocus = false;
+            }
+        }
 
-            // Fire-and-forget, but surface faults instead of silently swallowing them.
-            System.Threading.Tasks.Task focusTask = service.SetFocusAsync(
-                FocusTarget.position, preset.regionRadius, destroyCancellationToken);
-            focusTask.ContinueWith(t => Debug.LogException(
-                    t.Exception?.GetBaseException() ?? new Exception("region focus failed")),
-                System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted);
+        private void OnDisable()
+        {
+            focusCancellation?.Cancel();
         }
     }
 }
