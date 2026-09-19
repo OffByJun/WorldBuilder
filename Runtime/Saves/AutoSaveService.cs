@@ -51,14 +51,30 @@ namespace WorldBuilder.Runtime.Saves
             if (!bound) return null;
 
             List<WorldSaveService.SaveInfo> infos = WorldSaveService.List();
-            int existing = CountAutosaves(infos);
-            if (existing >= slotsToKeep)
-                DeleteOldestAutosave(infos);
+            infos.RemoveAll(info => !IsAutosave(info.Slot));
+            int index = 0;
+            string slot;
+            do
+            {
+                slot = $"{slotPattern}_{index++:00}";
+            }
+            while (WorldSaveService.Exists(slot) || WorldSaveService.Exists(slot + "_terrain") ||
+                WorldSaveService.Exists(slot + "_extras"));
 
-            // After pruning there is at least one free ring index.
-            int index = Math.Min(existing, Mathf.Max(0, slotsToKeep - 1));
-            string slot = $"{slotPattern}_{index:00}";
-            service.Save(slot);
+            try
+            {
+                service.Save(slot);
+            }
+            catch
+            {
+                try { WorldSaveService.Delete(slot); }
+                catch (Exception) { }
+                throw;
+            }
+
+            int keep = Mathf.Max(1, slotsToKeep);
+            for (int i = infos.Count - 1; i >= keep - 1; i--)
+                WorldSaveService.Delete(infos[i].Slot);
 
             LastSavedSlot = slot;
             AutoSaved?.Invoke(slot);
@@ -71,18 +87,12 @@ namespace WorldBuilder.Runtime.Saves
             TickNow();
         }
 
-        private static int CountAutosaves(List<WorldSaveService.SaveInfo> infos) =>
-            infos.FindAll(info => info.Slot.StartsWith("autosave", StringComparison.Ordinal)).Count;
-
-        private static void DeleteOldestAutosave(List<WorldSaveService.SaveInfo> infos)
+        private bool IsAutosave(string slot)
         {
-            WorldSaveService.SaveInfo oldest = null;
-            foreach (WorldSaveService.SaveInfo info in infos)
-            {
-                if (!info.Slot.StartsWith("autosave", StringComparison.Ordinal)) continue;
-                if (oldest == null || info.TimestampUtc < oldest.TimestampUtc) oldest = info;
-            }
-            if (oldest != null) WorldSaveService.Delete(oldest.Slot);
+            string prefix = slotPattern + "_";
+            if (!slot.StartsWith(prefix, StringComparison.Ordinal)) return false;
+            string suffix = slot.Substring(prefix.Length);
+            return int.TryParse(suffix, out int index) && index >= 0 && suffix == index.ToString("00");
         }
     }
 }

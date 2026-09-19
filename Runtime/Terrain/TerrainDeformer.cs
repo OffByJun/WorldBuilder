@@ -53,6 +53,8 @@ namespace WorldBuilder.Runtime.Terrain
 
         public static void ResetJournal() => editedChunks.Clear();
 
+        internal static void RecordRestoredChunk(Vector3Int coord) => editedChunks.Add(coord);
+
         /// <summary>
         /// Applies a spherical density delta (negative digs). Returns the number of voxels changed.
         /// Call <see cref="Remesh"/> afterwards for each reported chunk.

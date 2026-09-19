@@ -68,18 +68,12 @@ namespace WorldBuilder.Runtime.Saves
         public bool LoadFromSlot(string slot)
         {
             BuildLookup();
-            bool found = WorldSaveService.Load(slot, id => lookup.TryGetValue(id, out GameObject prefab) ? prefab : null);
+            if (!WorldSaveService.LoadSnapshot(slot, includeTerrainEdits ? terrainStore : null,
+                id => lookup.TryGetValue(id, out GameObject prefab) ? prefab : null, out _,
+                coord => TerrainChunkRestored?.Invoke(coord))) return false;
 
-            if (includeTerrainEdits && terrainStore != null)
-            {
-                int restored = WorldSaveService.LoadTerrain(slot, terrainStore,
-                    coord => TerrainChunkRestored?.Invoke(coord));
-                if (restored > 0) found = true;
-                Terrain.TerrainDeformer.ResetJournal();
-            }
-
-            if (found) Loaded?.Invoke(slot);
-            return found;
+            Loaded?.Invoke(slot);
+            return true;
         }
 
         public bool DeleteSlot(string slot) => WorldSaveService.Delete(slot);

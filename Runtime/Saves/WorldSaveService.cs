@@ -56,9 +56,7 @@ namespace WorldBuilder.Runtime.Saves
             };
 
             string path = Path.Combine(Directory, Sanitize(slot) + ".json");
-            string directory = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(directory)) System.IO.Directory.CreateDirectory(directory);
-            File.WriteAllText(path, JsonUtility.ToJson(file));
+            WriteAtomically(path, JsonUtility.ToJson(file));
         }
 
         /// <summary>
@@ -67,7 +65,7 @@ namespace WorldBuilder.Runtime.Saves
         /// </summary>
         public static bool Load(string slot, Func<string, GameObject> prefabResolver)
         {
-            if (!TryRead(slot, out SaveFile file)) return false;
+            if (!TryRead(slot, out SaveFile file) || prefabResolver == null) return false;
 
             Editing.RuntimePlacementService.Reset();
             Editing.RuntimePlacementService.RestoreFromJson(file.placementsJson, prefabResolver);
@@ -104,7 +102,7 @@ namespace WorldBuilder.Runtime.Saves
                 try
                 {
                     SaveFile file = JsonUtility.FromJson<SaveFile>(File.ReadAllText(path));
-                    if (file == null) continue;
+                    if (!IsValid(file)) continue;
                     result.Add(new SaveInfo(
                         Path.GetFileNameWithoutExtension(path),
                         DateTime.TryParse(file.timestampUtc, null, System.Globalization.DateTimeStyles.RoundtripKind, out DateTime parsed)
@@ -130,12 +128,100 @@ namespace WorldBuilder.Runtime.Saves
             try
             {
                 file = JsonUtility.FromJson<SaveFile>(File.ReadAllText(path));
+                return IsValid(file);
             }
             catch (Exception)
             {
+                file = null;
                 return false;
             }
-            return file != null;
+        }
+
+        [Serializable]
+        private sealed class PlacementSnapshot
+        {
+            public List<PlacementEntry> placements;
+        }
+
+        [Serializable]
+        private sealed class PlacementEntry
+        {
+            public string prefabId;
+            public float px, py, pz;
+            public float rx, ry, rz, rw;
+            public float scale = 1f;
+        }
+
+        private static bool IsValid(SaveFile file)
+        {
+            if (file == null || file.version < 0 || file.version > SaveMigrator.CurrentVersion ||
+                string.IsNullOrWhiteSpace(file.placementsJson)) return false;
+            string json = file.placementsJson.Trim();
+            if (!json.StartsWith("{", StringComparison.Ordinal) || !json.EndsWith("}", StringComparison.Ordinal))
+                return false;
+            if (string.IsNullOrWhiteSpace(json.Substring(1, json.Length - 2))) return true;
+            if (!HasPlacementArray(json)) return false;
+            PlacementSnapshot snapshot = JsonUtility.FromJson<PlacementSnapshot>(json);
+            if (snapshot?.placements == null) return false;
+            foreach (PlacementEntry entry in snapshot.placements)
+                if (entry == null || string.IsNullOrEmpty(entry.prefabId)) return false;
+            return true;
+        }
+
+        private static bool HasPlacementArray(string json)
+        {
+            int depth = 0;
+            bool found = false;
+            for (int i = 0; i < json.Length; i++)
+            {
+                char current = json[i];
+                if (current == '{' || current == '[') depth++;
+                else if (current == '}' || current == ']') depth--;
+                else if (current == '"')
+                {
+                    int start = ++i;
+                    while (i < json.Length && json[i] != '"')
+                    {
+                        if (json[i] == '\\') i++;
+                        i++;
+                    }
+                    if (i >= json.Length) return false;
+                    if (depth != 1 || json.Substring(start, i - start) != "placements") continue;
+                    int next = i + 1;
+                    while (next < json.Length && char.IsWhiteSpace(json[next])) next++;
+                    if (next >= json.Length || json[next] != ':') continue;
+                    next++;
+                    while (next < json.Length && char.IsWhiteSpace(json[next])) next++;
+                    if (found || next >= json.Length || json[next] != '[') return false;
+                    found = true;
+                }
+            }
+            return found && depth == 0;
+        }
+
+        private static void WriteAtomically(string path, string contents)
+        {
+            string directory = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(directory)) System.IO.Directory.CreateDirectory(directory);
+            string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    using (var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false), 1024, true))
+                    {
+                        writer.Write(contents);
+                        writer.Flush();
+                    }
+                    stream.Flush(true);
+                }
+                if (File.Exists(path)) File.Replace(temporary, path, null);
+                else File.Move(temporary, path);
+            }
+            finally
+            {
+                if (File.Exists(temporary)) File.Delete(temporary);
+            }
         }
 
         private static string PathFor(string slot)
@@ -200,9 +286,7 @@ namespace WorldBuilder.Runtime.Saves
                 extrasJson = extrasJson ?? string.Empty
             };
             string path = Path.Combine(Directory, Sanitize(slot) + "_extras.json");
-            string directory = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(directory)) System.IO.Directory.CreateDirectory(directory);
-            File.WriteAllText(path, JsonUtility.ToJson(extras));
+            WriteAtomically(path, JsonUtility.ToJson(extras));
         }
 
         /// <summary>
@@ -216,15 +300,10 @@ namespace WorldBuilder.Runtime.Saves
             Action<Vector3Int> chunkRestored = null)
         {
             extrasJson = null;
-            if (!Exists(slot)) return false;
-
-            Load(slot, prefabResolver);
-
-            int restoredChunks = store != null ? LoadTerrain(slot, store, chunkRestored) : -1;
-            if (restoredChunks < 0 && !File.Exists(Path.Combine(Directory, Sanitize(slot) + "_terrain.json")))
-            {
-                // No terrain sidecar — legacy placement-only slot still loads fine.
-            }
+            List<KeyValuePair<Vector3Int, WorldBuilder.Runtime.Data.VoxelData>> chunks = null;
+            if (store != null && !TryReadTerrain(slot, out chunks)) return false;
+            if (!Load(slot, prefabResolver)) return false;
+            if (chunks != null) RestoreTerrain(store, chunks, chunkRestored);
 
             string extrasPath = Path.Combine(Directory, Sanitize(slot) + "_extras.json");
             if (File.Exists(extrasPath))
@@ -280,9 +359,7 @@ namespace WorldBuilder.Runtime.Saves
             }
 
             string path = Path.Combine(Directory, Sanitize(slot) + "_terrain.json");
-            string directory = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(directory)) System.IO.Directory.CreateDirectory(directory);
-            File.WriteAllText(path, JsonUtility.ToJson(file));
+            WriteAtomically(path, JsonUtility.ToJson(file));
         }
 
         /// <summary>
@@ -293,38 +370,74 @@ namespace WorldBuilder.Runtime.Saves
             Action<Vector3Int> chunkRestored = null)
         {
             if (store == null) throw new ArgumentNullException(nameof(store));
+            if (!TryReadTerrain(slot, out var chunks) || chunks == null) return -1;
+            RestoreTerrain(store, chunks, chunkRestored);
+            return chunks.Count;
+        }
+
+        private static void RestoreTerrain(WorldBuilder.Runtime.Data.VoxelStoreAsset store,
+            List<KeyValuePair<Vector3Int, WorldBuilder.Runtime.Data.VoxelData>> chunks,
+            Action<Vector3Int> chunkRestored)
+        {
+            foreach (var chunk in chunks)
+            {
+                store.SetVoxelData(chunk.Key, chunk.Value);
+                Terrain.TerrainDeformer.RecordRestoredChunk(chunk.Key);
+            }
+            foreach (var chunk in chunks) chunkRestored?.Invoke(chunk.Key);
+        }
+
+        private static bool TryReadTerrain(string slot,
+            out List<KeyValuePair<Vector3Int, WorldBuilder.Runtime.Data.VoxelData>> chunks)
+        {
+            chunks = null;
             string path = Path.Combine(Directory, Sanitize(slot) + "_terrain.json");
-            if (!File.Exists(path)) return -1;
+            if (!File.Exists(path)) return true;
+            try
+            {
+                chunks = ReadTerrain(File.ReadAllText(path));
+                return chunks != null;
+            }
+            catch (Exception)
+            {
+                chunks = null;
+                return false;
+            }
+        }
 
-            TerrainDeltaFile file = JsonUtility.FromJson<TerrainDeltaFile>(File.ReadAllText(path));
-            if (file?.coords == null) return -1;
+        private static List<KeyValuePair<Vector3Int, WorldBuilder.Runtime.Data.VoxelData>> ReadTerrain(string json)
+        {
+            TerrainDeltaFile file = JsonUtility.FromJson<TerrainDeltaFile>(json);
+            if (file?.coords == null || file.densitiesBase64 == null ||
+                file.coords.Count != file.densitiesBase64.Count) return null;
 
-            int restored = 0;
-            for (int i = 0; i < file.coords.Count && i < file.densitiesBase64.Count; i++)
+            var chunks = new List<KeyValuePair<Vector3Int, WorldBuilder.Runtime.Data.VoxelData>>();
+            for (int i = 0; i < file.coords.Count; i++)
             {
                 string[] parts = file.coords[i].Split(',');
                 if (parts.Length != 3 ||
                     !int.TryParse(parts[0], out int cx) || !int.TryParse(parts[1], out int cy) ||
-                    !int.TryParse(parts[2], out int cz)) continue;
+                    !int.TryParse(parts[2], out int cz)) return null;
 
                 byte[] bytes = Convert.FromBase64String(file.densitiesBase64[i]);
+                if (bytes.Length == 0 || bytes.Length % sizeof(float) != 0) return null;
                 int count = bytes.Length / sizeof(float);
 
                 int sideX, sideY, sideZ;
-                if (i < file.sizes.Count)
+                if (file.sizes != null && i < file.sizes.Count)
                 {
                     string[] sizeParts = file.sizes[i].Split(',');
                     if (sizeParts.Length != 3 ||
                         !int.TryParse(sizeParts[0], out sideX) || !int.TryParse(sizeParts[1], out sideY) ||
                         !int.TryParse(sizeParts[2], out sideZ) || sideX <= 0 || sideY <= 0 || sideZ <= 0)
-                        continue;
+                        return null;
                 }
                 else
                 {
                     sideX = sideY = sideZ = Mathf.Max(1, Mathf.RoundToInt(Mathf.Pow(count, 1f / 3f)));
                 }
 
-                if (sideX * sideY * sideZ != count) continue;
+                if ((long)sideX * sideY * sideZ != count) return null;
 
                 var voxels = new WorldBuilder.Runtime.Data.VoxelData(sideX, sideY, sideZ);
                 float[] flat = new float[count];
@@ -334,11 +447,10 @@ namespace WorldBuilder.Runtime.Saves
                 for (int z = 0; z < sideZ; z++)
                     voxels.SetDensity(x, y, z, flat[x + sideX * (y + sideY * z)]);
 
-                store.SetVoxelData(new Vector3Int(cx, cy, cz), voxels);
-                chunkRestored?.Invoke(new Vector3Int(cx, cy, cz));
-                restored++;
+                chunks.Add(new KeyValuePair<Vector3Int, WorldBuilder.Runtime.Data.VoxelData>(
+                    new Vector3Int(cx, cy, cz), voxels));
             }
-            return restored;
+            return chunks;
         }
     }
 }
