@@ -22,7 +22,7 @@ namespace WorldBuilder.Editor
             WorldBuilderCategory.Collaboration,
             WorldBuilderCategory.Physics,
             WorldBuilderCategory.World,
-            WorldBuilderCategory.AstraNope,
+            WorldBuilderCategory.Survival,
             WorldBuilderCategory.Fallback
         };
 

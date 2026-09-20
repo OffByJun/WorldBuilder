@@ -18,7 +18,7 @@ namespace WorldBuilder.Editor.PressureZoneTool
         private readonly List<Vector3> positions = new List<Vector3>();
 
         public string ToolName => WorldBuilderLocalization.Get("tool.pressureZone");
-        public string Category => WorldBuilderCategory.AstraNope;
+        public string Category => WorldBuilderCategory.Survival;
 
         public Texture2D ToolIcon => null;
 

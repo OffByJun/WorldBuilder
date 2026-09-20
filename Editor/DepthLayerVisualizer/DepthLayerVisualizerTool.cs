@@ -17,7 +17,7 @@ namespace WorldBuilder.Editor.DepthLayerVisualizer
         private const float PlaneExtent = 250f;
 
         public string ToolName => WorldBuilderLocalization.Get("tool.depthLayer");
-        public string Category => WorldBuilderCategory.AstraNope;
+        public string Category => WorldBuilderCategory.Survival;
 
         public Texture2D ToolIcon => null;
 

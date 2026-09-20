@@ -44,7 +44,7 @@
 * E2E 시나리오 테스트 추가(생성→카브→입구→볼륨 배치→굴착→세이브→복원 비교)
 
 > ⚠️ 이 릴리즈의 테스트 실행은 게임 프로젝트 측(Assets/001_Scripts)의 신규 컴파일 오류
-> (`using AstraNope.Editor` in runtime code)로 차단되었습니다. 패키지 자체는 이전 빌드까지
+> (`using _001_Scripts.Editor` in runtime code)로 차단되었습니다. 패키지 자체는 이전 빌드까지
 > 전부 통과 상태이며, 게임 측 오류 해결 후 즉시 검증 가능합니다.
 
 ## 0.16.2 — Stabilization II

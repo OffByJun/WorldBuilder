@@ -18,7 +18,7 @@ namespace WorldBuilder.Editor.VisibilityZoneTool
         private readonly List<Vector3> positions = new List<Vector3>();
 
         public string ToolName => WorldBuilderLocalization.Get("tool.visibilityZone");
-        public string Category => WorldBuilderCategory.AstraNope;
+        public string Category => WorldBuilderCategory.Survival;
 
         public Texture2D ToolIcon => null;
 

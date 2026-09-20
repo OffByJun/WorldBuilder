@@ -26,7 +26,7 @@ namespace WorldBuilder.Editor.BiomeSetter
         }
 
         public string ToolName => WorldBuilderLocalization.Get("tool.biomeSetter");
-        public string Category => WorldBuilderCategory.AstraNope;
+        public string Category => WorldBuilderCategory.Survival;
 
         public Texture2D ToolIcon => null;
 

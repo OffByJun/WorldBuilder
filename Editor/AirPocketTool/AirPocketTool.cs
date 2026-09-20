@@ -13,7 +13,7 @@ namespace WorldBuilder.Editor.AirPocketTool
         [SerializeField] private string label = string.Empty;
 
         public string ToolName => WorldBuilderLocalization.Get("tool.airPocket");
-        public string Category => WorldBuilderCategory.AstraNope;
+        public string Category => WorldBuilderCategory.Survival;
 
         public Texture2D ToolIcon => null;
 
