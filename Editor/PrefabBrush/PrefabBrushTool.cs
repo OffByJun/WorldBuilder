@@ -32,6 +32,7 @@ namespace WorldBuilder.Editor.PrefabBrush
         private WaterQueryService waterService;
         private WaterWorldRuntimeData waterDataCache;
         private PrefabBrushPreset loadedPreset;
+        private PrefabPaletteView palette;
 
         public PrefabBrushTool(IBiomeMap biomeMap)
         {
@@ -60,17 +61,17 @@ namespace WorldBuilder.Editor.PrefabBrush
             EnsureInit();
 
             VisualElement root = new VisualElement();
-            // root.Add(new Label("Prefab Brush PRO++"));
-            
+            PrefabBrushUI.ApplyStyle(root);
+
             root.Add(InspectorHelp.Build(ToolName, "help.prefabBrush"));
-            root.Add(BuildSeedSection());
+            root.Add(BuildModeSection());
             root.Add(BuildBrushSection());
-            root.Add(BuildPresetSection());
-            root.Add(BuildPlacementSection());
             root.Add(BuildPrefabSection());
-            root.Add(BuildEnvironmentSection());
+            root.Add(BuildPlacementSection());
             root.Add(BuildMaskSection());
+            root.Add(BuildEnvironmentSection());
             root.Add(BuildModifierGraphSection());
+            root.Add(BuildPresetSection());
             root.Add(BuildStrokeSection());
 
             return root;
@@ -273,7 +274,7 @@ namespace WorldBuilder.Editor.PrefabBrush
 
             for (int i = 0; i < density; i++)
             {
-                GameObject prefab = PickWeighted(valid, totalWeight, rng);
+                PrefabEntry entry = PickWeighted(valid, totalWeight, rng);
 
                 double angle = rng.NextDouble() * Math.PI * 2.0;
                 double distance = Math.Sqrt(rng.NextDouble()) * radius;
@@ -287,22 +288,23 @@ namespace WorldBuilder.Editor.PrefabBrush
                 }
 
                 float yaw = (float)(rng.NextDouble() * 360.0);
-                float scale = Mathf.Lerp(settings.scaleRange.x, settings.scaleRange.y, (float)rng.NextDouble());
+                Vector2 scaleRange = entry.ScaleRange(settings);
+                float scale = Mathf.Lerp(scaleRange.x, scaleRange.y, (float)rng.NextDouble());
 
                 if (!PassesMask(position, normal))
                 {
                     continue;
                 }
 
-                Quaternion rotation = settings.alignToNormal ? Quaternion.FromToRotation(Vector3.up, normal) : Quaternion.identity;
-                if (settings.randomYaw)
+                Quaternion rotation = entry.AlignToNormal(settings) ? Quaternion.FromToRotation(Vector3.up, normal) : Quaternion.identity;
+                if (entry.RandomYaw(settings))
                 {
                     rotation *= Quaternion.AngleAxis(yaw, Vector3.up);
                 }
 
                 BrushContext context = new BrushContext
                 {
-                    position = position,
+                    position = position + rotation * Vector3.up * entry.heightOffset,
                     normal = normal,
                     rotation = rotation,
                     scale = Vector3.one * scale
@@ -336,7 +338,7 @@ namespace WorldBuilder.Editor.PrefabBrush
 
                 placements.Add(new BrushPlacement
                 {
-                    prefab = prefab,
+                    prefab = entry.prefab,
                     position = context.position,
                     rotation = context.rotation,
                     scale = context.scale
@@ -346,7 +348,7 @@ namespace WorldBuilder.Editor.PrefabBrush
             return placements;
         }
 
-        private GameObject PickWeighted(List<PrefabEntry> valid, float totalWeight, System.Random rng)
+        private PrefabEntry PickWeighted(List<PrefabEntry> valid, float totalWeight, System.Random rng)
         {
             double roll = rng.NextDouble() * totalWeight;
             double cumulative = 0.0;
@@ -355,11 +357,11 @@ namespace WorldBuilder.Editor.PrefabBrush
                 cumulative += valid[i].weight;
                 if (roll <= cumulative)
                 {
-                    return valid[i].prefab;
+                    return valid[i];
                 }
             }
 
-            return valid[valid.Count - 1].prefab;
+            return valid[valid.Count - 1];
         }
 
         private bool PassesMask(Vector3 position, Vector3 normal)
@@ -491,12 +493,36 @@ namespace WorldBuilder.Editor.PrefabBrush
                     continue;
                 }
 
+                if (settings.eraseOnlyPaletteModels && !IsPaletteInstance(instance))
+                {
+                    continue;
+                }
+
                 spatialHash.Remove(instance.transform.position, instance);
                 Undo.DestroyObjectImmediate(instance);
             }
 
             Undo.SetCurrentGroupName("Erase Prefabs");
             Undo.CollapseUndoOperations(group);
+        }
+
+        private bool IsPaletteInstance(GameObject instance)
+        {
+            GameObject source = PrefabUtility.GetCorrespondingObjectFromSource(instance);
+            if (source == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < settings.prefabEntries.Count; i++)
+            {
+                if (settings.prefabEntries[i].prefab == source)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void Replay()
@@ -584,12 +610,103 @@ namespace WorldBuilder.Editor.PrefabBrush
             }
         }
 
-        private VisualElement BuildSeedSection()
+        private VisualElement BuildModeSection()
         {
-            VisualElement row = new VisualElement();
-            row.style.flexDirection = FlexDirection.Row;
+            VisualElement section = new VisualElement();
 
-            IntegerField seedField = new IntegerField("Seed") { value = settings.seed };
+            VisualElement modes = new VisualElement();
+            modes.AddToClassList("pb-mode");
+            Button paint = new Button { text = PrefabBrushUI.T("mode.paint") };
+            Button erase = new Button { text = PrefabBrushUI.T("mode.erase") };
+            paint.AddToClassList("pb-mode__button");
+            erase.AddToClassList("pb-mode__button");
+            erase.AddToClassList("pb-mode__button--erase");
+            modes.Add(paint);
+            modes.Add(erase);
+            section.Add(modes);
+
+            Label hint = PrefabBrushUI.Hint(string.Empty);
+            section.Add(hint);
+
+            Toggle eraseOnly = new Toggle(PrefabBrushUI.T("eraseOnly")) { value = settings.eraseOnlyPaletteModels }
+                .WithTooltip(PrefabBrushUI.T("eraseOnly.tip"));
+            eraseOnly.RegisterValueChangedCallback(evt =>
+            {
+                Undo.RecordObject(settings, "Erase Only Palette Models");
+                settings.eraseOnlyPaletteModels = evt.newValue;
+                EditorUtility.SetDirty(settings);
+            });
+            section.Add(eraseOnly);
+
+            void Show()
+            {
+                paint.EnableInClassList("pb-mode__button--active", !settings.eraseMode);
+                erase.EnableInClassList("pb-mode__button--active", settings.eraseMode);
+                hint.text = PrefabBrushUI.T(settings.eraseMode ? "mode.eraseHint" : "mode.paintHint");
+                eraseOnly.style.display = settings.eraseMode ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+
+            void SetErase(bool value)
+            {
+                if (settings.eraseMode == value)
+                {
+                    return;
+                }
+
+                Undo.RecordObject(settings, "Set Erase Mode");
+                settings.eraseMode = value;
+                EditorUtility.SetDirty(settings);
+                Show();
+            }
+
+            paint.clicked += () => SetErase(false);
+            erase.clicked += () => SetErase(true);
+            Show();
+            return section;
+        }
+
+        private VisualElement BuildBrushSection()
+        {
+            VisualElement card = PrefabBrushUI.Card(PrefabBrushUI.T("card.brush"));
+
+            Slider radius = new Slider(PrefabBrushUI.T("radius"), 0.1f, 50f) { value = settings.brushRadius, showInputField = true };
+            radius.RegisterValueChangedCallback(evt =>
+            {
+                Undo.RecordObject(settings, "Set Radius");
+                settings.brushRadius = evt.newValue;
+                EditorUtility.SetDirty(settings);
+            });
+            card.Add(radius);
+
+            SliderInt density = new SliderInt(PrefabBrushUI.T("density"), 1, 50) { value = settings.brushDensity, showInputField = true };
+            density.RegisterValueChangedCallback(evt =>
+            {
+                Undo.RecordObject(settings, "Set Density");
+                settings.brushDensity = evt.newValue;
+                EditorUtility.SetDirty(settings);
+            });
+            card.Add(density);
+
+            Toggle paintOnDrag = new Toggle(PrefabBrushUI.T("paintOnDrag")) { value = settings.paintOnDrag };
+            Slider dragSpacing = new Slider(PrefabBrushUI.T("dragSpacing"), 0.05f, 10f) { value = settings.dragSpacing, showInputField = true };
+            paintOnDrag.RegisterValueChangedCallback(evt =>
+            {
+                Undo.RecordObject(settings, "Set Paint On Drag");
+                settings.paintOnDrag = evt.newValue;
+                EditorUtility.SetDirty(settings);
+                dragSpacing.SetEnabled(evt.newValue);
+            });
+            dragSpacing.RegisterValueChangedCallback(evt =>
+            {
+                Undo.RecordObject(settings, "Set Drag Spacing");
+                settings.dragSpacing = evt.newValue;
+                EditorUtility.SetDirty(settings);
+            });
+            dragSpacing.SetEnabled(settings.paintOnDrag);
+            card.Add(paintOnDrag);
+            card.Add(dragSpacing);
+
+            IntegerField seedField = new IntegerField(PrefabBrushUI.T("seed")) { value = settings.seed };
             seedField.style.flexGrow = 1;
             seedField.RegisterValueChangedCallback(evt =>
             {
@@ -597,77 +714,25 @@ namespace WorldBuilder.Editor.PrefabBrush
                 settings.seed = evt.newValue;
                 EditorUtility.SetDirty(settings);
             });
-
-            Button randomize = new Button(() =>
+            Button randomize = PrefabBrushUI.Button(PrefabBrushUI.T("randomize"), () =>
             {
                 Undo.RecordObject(settings, "Randomize Seed");
                 settings.seed = UnityEngine.Random.Range(0, 99999);
                 EditorUtility.SetDirty(settings);
                 seedField.SetValueWithoutNotify(settings.seed);
-            }) { text = "Randomize" };
-
-            row.Add(seedField);
-            row.Add(randomize);
-            return row;
-        }
-
-        private VisualElement BuildBrushSection()
-        {
-            VisualElement section = new VisualElement();
-
-            Slider radius = new Slider("Radius", 0.1f, 50f) { value = settings.brushRadius };
-            radius.RegisterValueChangedCallback(evt =>
-            {
-                Undo.RecordObject(settings, "Set Radius");
-                settings.brushRadius = evt.newValue;
-                EditorUtility.SetDirty(settings);
             });
-            section.Add(radius);
+            randomize.style.marginLeft = 4f;
+            randomize.style.marginRight = 0f;
+            card.Add(PrefabBrushUI.Row(seedField, randomize));
 
-            SliderInt density = new SliderInt("Density", 1, 50) { value = settings.brushDensity };
-            density.RegisterValueChangedCallback(evt =>
-            {
-                Undo.RecordObject(settings, "Set Density");
-                settings.brushDensity = evt.newValue;
-                EditorUtility.SetDirty(settings);
-            });
-            section.Add(density);
-
-            Toggle erase = new Toggle("Erase Mode") { value = settings.eraseMode };
-            erase.RegisterValueChangedCallback(evt =>
-            {
-                Undo.RecordObject(settings, "Set Erase Mode");
-                settings.eraseMode = evt.newValue;
-                EditorUtility.SetDirty(settings);
-            });
-            section.Add(erase);
-
-            Toggle paintOnDrag = new Toggle("Paint On Drag") { value = settings.paintOnDrag };
-            paintOnDrag.RegisterValueChangedCallback(evt =>
-            {
-                Undo.RecordObject(settings, "Set Paint On Drag");
-                settings.paintOnDrag = evt.newValue;
-                EditorUtility.SetDirty(settings);
-            });
-            section.Add(paintOnDrag);
-
-            Slider dragSpacing = new Slider("Drag Spacing", 0.05f, 10f) { value = settings.dragSpacing };
-            dragSpacing.RegisterValueChangedCallback(evt =>
-            {
-                Undo.RecordObject(settings, "Set Drag Spacing");
-                settings.dragSpacing = evt.newValue;
-                EditorUtility.SetDirty(settings);
-            });
-            section.Add(dragSpacing);
-
-            return section;
+            return card;
         }
 
         private VisualElement BuildPresetSection()
         {
-            Foldout foldout = new Foldout { text = "Brush Preset", value = false };
+            Foldout foldout = PrefabBrushUI.FoldoutCard(PrefabBrushUI.T("card.preset"), false);
 
-            ObjectField preset = new ObjectField("Preset")
+            ObjectField preset = new ObjectField(PrefabBrushUI.T("preset"))
             {
                 objectType = typeof(PrefabBrushPreset),
                 value = loadedPreset
@@ -675,10 +740,7 @@ namespace WorldBuilder.Editor.PrefabBrush
             preset.RegisterValueChangedCallback(evt => loadedPreset = evt.newValue as PrefabBrushPreset);
             foldout.Add(preset);
 
-            VisualElement row = new VisualElement();
-            row.style.flexDirection = FlexDirection.Row;
-
-            Button load = new Button(() =>
+            Button load = PrefabBrushUI.Button(PrefabBrushUI.T("preset.load"), () =>
             {
                 if (loadedPreset == null)
                 {
@@ -688,13 +750,12 @@ namespace WorldBuilder.Editor.PrefabBrush
 
                 Undo.RecordObject(settings, "Load Brush Preset");
                 loadedPreset.ApplyTo(settings);
+                palette?.Refresh();
                 EditorUtility.SetDirty(settings);
                 UndoHistory.Push("Load Brush Preset");
-            }) { text = "Load" };
-            load.style.flexGrow = 1;
-            row.Add(load);
+            }, "grow");
 
-            Button save = new Button(() =>
+            Button save = PrefabBrushUI.Button(PrefabBrushUI.T("preset.save"), () =>
             {
                 if (loadedPreset == null)
                 {
@@ -710,6 +771,7 @@ namespace WorldBuilder.Editor.PrefabBrush
                     }
 
                     AssetDatabase.CreateAsset(loadedPreset, path);
+                    preset.SetValueWithoutNotify(loadedPreset);
                 }
                 else
                 {
@@ -720,166 +782,93 @@ namespace WorldBuilder.Editor.PrefabBrush
                 EditorUtility.SetDirty(loadedPreset);
                 AssetDatabase.SaveAssets();
                 UndoHistory.Push("Save Brush Preset");
-            }) { text = "Save To Preset" };
-            save.style.flexGrow = 1;
-            row.Add(save);
+            }, "grow");
+            save.style.marginRight = 0f;
 
+            VisualElement row = PrefabBrushUI.Row(load, save);
+            row.style.marginTop = 4f;
             foldout.Add(row);
             return foldout;
         }
 
         private VisualElement BuildPlacementSection()
         {
-            VisualElement section = new VisualElement();
+            Foldout foldout = PrefabBrushUI.FoldoutCard(PrefabBrushUI.T("card.placement"), true);
 
-            Toggle align = new Toggle("Align To Normal") { value = settings.alignToNormal };
+            Toggle align = new Toggle(PrefabBrushUI.T("align")) { value = settings.alignToNormal };
             align.RegisterValueChangedCallback(evt =>
             {
                 Undo.RecordObject(settings, "Set Align To Normal");
                 settings.alignToNormal = evt.newValue;
                 EditorUtility.SetDirty(settings);
+                palette?.Refresh();
             });
-            section.Add(align);
+            foldout.Add(align);
 
-            Toggle yaw = new Toggle("Random Yaw") { value = settings.randomYaw };
+            Toggle yaw = new Toggle(PrefabBrushUI.T("yaw")) { value = settings.randomYaw };
             yaw.RegisterValueChangedCallback(evt =>
             {
                 Undo.RecordObject(settings, "Set Random Yaw");
                 settings.randomYaw = evt.newValue;
                 EditorUtility.SetDirty(settings);
+                palette?.Refresh();
             });
-            section.Add(yaw);
+            foldout.Add(yaw);
 
-            Vector2Field scaleRange = new Vector2Field("Scale Range") { value = settings.scaleRange };
+            Vector2Field scaleRange = new Vector2Field(PrefabBrushUI.T("scaleRange")) { value = settings.scaleRange };
             scaleRange.RegisterValueChangedCallback(evt =>
             {
                 Undo.RecordObject(settings, "Set Scale Range");
                 settings.scaleRange = evt.newValue;
                 EditorUtility.SetDirty(settings);
+                palette?.Refresh();
             });
-            section.Add(scaleRange);
+            foldout.Add(scaleRange);
 
-            FloatField chunkSize = new FloatField("Chunk Size") { value = settings.chunkSize };
+            FloatField chunkSize = new FloatField(PrefabBrushUI.T("chunkSize")) { value = settings.chunkSize };
             chunkSize.RegisterValueChangedCallback(evt =>
             {
                 Undo.RecordObject(settings, "Set Chunk Size");
                 settings.chunkSize = evt.newValue;
                 EditorUtility.SetDirty(settings);
             });
-            section.Add(chunkSize);
+            foldout.Add(chunkSize);
 
-            ObjectField waterData = new ObjectField("Water Runtime Data")
+            ObjectField waterData = new ObjectField(PrefabBrushUI.T("waterData"))
             {
                 objectType = typeof(WaterWorldRuntimeData),
                 value = settings.waterData
-            };
-            waterData.tooltip = "Enables the Water Depth Mask node in Modifier Graphs.";
+            }.WithTooltip(PrefabBrushUI.T("waterData.tip"));
             waterData.RegisterValueChangedCallback(evt =>
             {
                 Undo.RecordObject(settings, "Set Water Data");
                 settings.waterData = evt.newValue as WaterWorldRuntimeData;
                 EditorUtility.SetDirty(settings);
             });
-            section.Add(waterData);
+            foldout.Add(waterData);
 
-            Toggle duplicate = new Toggle("Duplicate Shared SO") { value = settings.duplicateSharedScriptableObjects };
+            Toggle duplicate = new Toggle(PrefabBrushUI.T("duplicateSO")) { value = settings.duplicateSharedScriptableObjects }
+                .WithTooltip(PrefabBrushUI.T("duplicateSO.tip"));
             duplicate.RegisterValueChangedCallback(evt =>
             {
                 Undo.RecordObject(settings, "Set Duplicate Shared SO");
                 settings.duplicateSharedScriptableObjects = evt.newValue;
                 EditorUtility.SetDirty(settings);
             });
-            section.Add(duplicate);
+            foldout.Add(duplicate);
 
-            return section;
+            return foldout;
         }
 
         private VisualElement BuildPrefabSection()
         {
-            VisualElement section = new VisualElement();
-            section.Add(new Label("Prefabs"));
-
-            VisualElement list = new VisualElement();
-            section.Add(list);
-
-            void Rebuild()
-            {
-                list.Clear();
-                for (int i = 0; i < settings.prefabEntries.Count; i++)
-                {
-                    if (settings.prefabEntries[i].envType != EnvironmentType.None)
-                    {
-                        continue;
-                    }
-
-                    int index = i;
-
-                    VisualElement row = new VisualElement();
-                    row.style.flexDirection = FlexDirection.Row;
-
-                    ObjectField field = new ObjectField
-                    {
-                        objectType = typeof(GameObject),
-                        value = settings.prefabEntries[index].prefab
-                    };
-                    field.style.flexGrow = 1;
-                    field.RegisterValueChangedCallback(evt =>
-                    {
-                        Undo.RecordObject(settings, "Set Prefab");
-                        PrefabEntry entry = settings.prefabEntries[index];
-                        entry.prefab = evt.newValue as GameObject;
-                        settings.prefabEntries[index] = entry;
-                        EditorUtility.SetDirty(settings);
-                    });
-
-                    Slider weight = new Slider(0f, 1f) { value = settings.prefabEntries[index].weight };
-                    weight.style.width = 120f;
-                    weight.RegisterValueChangedCallback(evt =>
-                    {
-                        Undo.RecordObject(settings, "Set Weight");
-                        PrefabEntry entry = settings.prefabEntries[index];
-                        entry.weight = evt.newValue;
-                        settings.prefabEntries[index] = entry;
-                        EditorUtility.SetDirty(settings);
-                    });
-
-                    Button remove = new Button(() =>
-                    {
-                        Undo.RecordObject(settings, "Remove Prefab");
-                        settings.prefabEntries.RemoveAt(index);
-                        EditorUtility.SetDirty(settings);
-                        Rebuild();
-                    }) { text = "X" };
-
-                    row.Add(field);
-                    row.Add(weight);
-                    row.Add(remove);
-                    list.Add(row);
-                }
-            }
-
-            Button add = new Button(() =>
-            {
-                Undo.RecordObject(settings, "Add Prefab");
-                settings.prefabEntries.Add(new PrefabEntry { prefab = null, weight = 1f });
-                EditorUtility.SetDirty(settings);
-                Rebuild();
-            }) { text = "Add" };
-
-            section.Add(add);
-            Rebuild();
-            return section;
+            palette = new PrefabPaletteView(settings);
+            return palette;
         }
 
         private VisualElement BuildEnvironmentSection()
         {
-            Foldout section = new Foldout { text = "Environment Brush", value = false };
-            Toggle sectionToggle = section.Q<Toggle>();
-            if (sectionToggle != null)
-            {
-                sectionToggle.style.unityFontStyleAndWeight = FontStyle.Bold;
-                sectionToggle.style.fontSize = 13f;
-            }
+            Foldout section = PrefabBrushUI.FoldoutCard(PrefabBrushUI.T("card.environment"), false);
 
             for (int i = 0; i < environmentBrushes.Count; i++)
             {
@@ -895,70 +884,77 @@ namespace WorldBuilder.Editor.PrefabBrush
 
         private VisualElement BuildMaskSection()
         {
-            Foldout foldout = new Foldout { text = "Brush Mask", value = false };
+            Foldout foldout = PrefabBrushUI.FoldoutCard(PrefabBrushUI.T("card.mask"), false);
             BrushMask mask = settings.mask;
 
-            Toggle useHeight = new Toggle("Use Height Mask") { value = mask.useHeightMask };
+            FloatField minHeight = new FloatField(PrefabBrushUI.T("minHeight")) { value = mask.minHeight };
+            FloatField maxHeight = new FloatField(PrefabBrushUI.T("maxHeight")) { value = mask.maxHeight };
+            Slider maxSlope = new Slider(PrefabBrushUI.T("maxSlope"), 0f, 90f) { value = mask.maxSlopeAngle, showInputField = true };
+            EnumField allowedBiome = new EnumField(PrefabBrushUI.T("allowedBiome"), mask.allowedBiome);
+
+            Toggle useHeight = new Toggle(PrefabBrushUI.T("useHeight")) { value = mask.useHeightMask };
             useHeight.RegisterValueChangedCallback(evt =>
             {
                 Undo.RecordObject(settings, "Set Height Mask");
                 mask.useHeightMask = evt.newValue;
                 EditorUtility.SetDirty(settings);
+                minHeight.SetEnabled(evt.newValue);
+                maxHeight.SetEnabled(evt.newValue);
             });
-            foldout.Add(useHeight);
-
-            FloatField minHeight = new FloatField("Min Height") { value = mask.minHeight };
             minHeight.RegisterValueChangedCallback(evt =>
             {
                 Undo.RecordObject(settings, "Set Min Height");
                 mask.minHeight = evt.newValue;
                 EditorUtility.SetDirty(settings);
             });
-            foldout.Add(minHeight);
-
-            FloatField maxHeight = new FloatField("Max Height") { value = mask.maxHeight };
             maxHeight.RegisterValueChangedCallback(evt =>
             {
                 Undo.RecordObject(settings, "Set Max Height");
                 mask.maxHeight = evt.newValue;
                 EditorUtility.SetDirty(settings);
             });
+            minHeight.SetEnabled(mask.useHeightMask);
+            maxHeight.SetEnabled(mask.useHeightMask);
+            foldout.Add(useHeight);
+            foldout.Add(minHeight);
             foldout.Add(maxHeight);
 
-            Toggle useSlope = new Toggle("Use Slope Mask") { value = mask.useSlopeMask };
+            Toggle useSlope = new Toggle(PrefabBrushUI.T("useSlope")) { value = mask.useSlopeMask };
             useSlope.RegisterValueChangedCallback(evt =>
             {
                 Undo.RecordObject(settings, "Set Slope Mask");
                 mask.useSlopeMask = evt.newValue;
                 EditorUtility.SetDirty(settings);
+                maxSlope.SetEnabled(evt.newValue);
             });
-            foldout.Add(useSlope);
-
-            Slider maxSlope = new Slider("Max Slope Angle", 0f, 90f) { value = mask.maxSlopeAngle };
             maxSlope.RegisterValueChangedCallback(evt =>
             {
                 Undo.RecordObject(settings, "Set Max Slope");
                 mask.maxSlopeAngle = evt.newValue;
                 EditorUtility.SetDirty(settings);
             });
+            maxSlope.SetEnabled(mask.useSlopeMask);
+            useSlope.style.marginTop = 6f;
+            foldout.Add(useSlope);
             foldout.Add(maxSlope);
 
-            Toggle useBiome = new Toggle("Use Biome Mask") { value = mask.useBiomeMask };
+            Toggle useBiome = new Toggle(PrefabBrushUI.T("useBiome")) { value = mask.useBiomeMask };
             useBiome.RegisterValueChangedCallback(evt =>
             {
                 Undo.RecordObject(settings, "Set Biome Mask");
                 mask.useBiomeMask = evt.newValue;
                 EditorUtility.SetDirty(settings);
+                allowedBiome.SetEnabled(evt.newValue);
             });
-            foldout.Add(useBiome);
-
-            EnumField allowedBiome = new EnumField("Allowed Biome", mask.allowedBiome);
             allowedBiome.RegisterValueChangedCallback(evt =>
             {
                 Undo.RecordObject(settings, "Set Allowed Biome");
                 mask.allowedBiome = (WorldBuilder.Runtime.Data.BiomeType)evt.newValue;
                 EditorUtility.SetDirty(settings);
             });
+            allowedBiome.SetEnabled(mask.useBiomeMask);
+            useBiome.style.marginTop = 6f;
+            foldout.Add(useBiome);
             foldout.Add(allowedBiome);
 
             return foldout;
@@ -966,9 +962,9 @@ namespace WorldBuilder.Editor.PrefabBrush
 
         private VisualElement BuildModifierGraphSection()
         {
-            VisualElement section = new VisualElement();
+            Foldout foldout = PrefabBrushUI.FoldoutCard(PrefabBrushUI.T("card.modifier"), false);
 
-            ObjectField graphField = new ObjectField("Modifier Graph")
+            ObjectField graphField = new ObjectField(PrefabBrushUI.T("modifierGraph"))
             {
                 objectType = typeof(ModifierGraph),
                 value = settings.modifierGraph
@@ -979,38 +975,39 @@ namespace WorldBuilder.Editor.PrefabBrush
                 settings.modifierGraph = evt.newValue as ModifierGraph;
                 EditorUtility.SetDirty(settings);
             });
-            section.Add(graphField);
+            foldout.Add(graphField);
 
-            Button open = new Button(() => ModifierGraphWindow.Open(settings.modifierGraph)) { text = "Open Modifier Graph" };
-            section.Add(open);
+            Button open = PrefabBrushUI.Button(PrefabBrushUI.T("openGraph"), () => ModifierGraphWindow.Open(settings.modifierGraph), "grow");
+            open.style.marginTop = 4f;
+            open.style.marginRight = 0f;
+            foldout.Add(PrefabBrushUI.Row(open));
 
-            return section;
+            return foldout;
         }
 
         private VisualElement BuildStrokeSection()
         {
-            VisualElement section = new VisualElement();
-            section.Add(new Label("Scatter Strokes"));
+            Foldout foldout = PrefabBrushUI.FoldoutCard(PrefabBrushUI.T("card.strokes"), false);
+            string title = PrefabBrushUI.T("card.strokes");
+            foldout.schedule.Execute(() =>
+                foldout.text = title + "  ·  " + PrefabBrushUI.T("strokes.meta", settings.strokes.Count)).Every(300);
 
-            Label count = new Label();
-            section.Add(count);
-            section.schedule.Execute(() => count.text = "Recorded Strokes: " + settings.strokes.Count).Every(200);
+            foldout.Add(PrefabBrushUI.Hint(PrefabBrushUI.T("strokes.hint")));
 
-            VisualElement row = new VisualElement();
-            row.style.flexDirection = FlexDirection.Row;
-
-            row.Add(new Button(Replay) { text = "Replay" });
-            row.Add(new Button(ExportStrokes) { text = "Export" });
-            row.Add(new Button(ImportStrokes) { text = "Import" });
-            row.Add(new Button(() =>
+            Button clear = PrefabBrushUI.Button(PrefabBrushUI.T("strokes.clear"), () =>
             {
                 Undo.RecordObject(settings, "Clear Strokes");
                 settings.strokes.Clear();
                 EditorUtility.SetDirty(settings);
-            }) { text = "Clear" });
+            }, "danger");
+            clear.style.marginRight = 0f;
 
-            section.Add(row);
-            return section;
+            foldout.Add(PrefabBrushUI.Row(
+                PrefabBrushUI.Button(PrefabBrushUI.T("strokes.replay"), Replay, "primary"),
+                PrefabBrushUI.Button(PrefabBrushUI.T("strokes.export"), ExportStrokes),
+                PrefabBrushUI.Button(PrefabBrushUI.T("strokes.import"), ImportStrokes),
+                clear));
+            return foldout;
         }
 
         private void ExportStrokes()
