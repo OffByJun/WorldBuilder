@@ -17,6 +17,7 @@ namespace WorldBuilder.Editor
         {
             { "tool.meshEdit", "메시 편집" },
             { "tool.prefabBrush", "프리팹 브러시" },
+            { "tool.meshSculpt", "메시 조각 브러시" },
             { "tool.terrainPaint", "지형 페인팅" },
             { "tool.biomeSetter", "바이옴 설정" },
             { "tool.spawnEdit", "스폰 편집" },
@@ -81,6 +82,7 @@ namespace WorldBuilder.Editor
             { "help.title", "사용법" },
             { "help.meshEdit", "MeshFilter를 지정한 뒤 씬에서 정점을 드래그해 편집합니다. Shift+드래그로 박스 선택, 선택된 정점은 그룹으로 함께 이동합니다." },
             { "help.prefabBrush", "프리팹 목록을 채우고 씬을 클릭/드래그하면 브러시 반경 안에 프리팹을 분산 배치합니다. Erase 모드는 반경 내 프리팹 인스턴스를 삭제합니다." },
+            { "help.meshSculpt", "이미 배치된 맵 메시를 Blender 조각처럼 다듬습니다. 브러시를 고르고 씬에서 클릭·드래그하세요. 브러시 아래는 자동으로 잘게 나뉘고, 처음 수정할 때 편집용 복사본(Assets/008_WorldBuilder/Sculpted)이 만들어져 원본 모델은 바뀌지 않습니다. Ctrl+Z로 되돌릴 수 있습니다." },
             { "help.terrainPaint", "MeshRenderer를 지정하고 씬을 칠하면 정점 컬러를 브러시로 섞습니다. 반경/강도/색을 조절하세요." },
             { "help.biomeSetter", "바이옴과 청크 크기를 정한 뒤 씬을 클릭해 청크에 바이옴을 지정합니다. Erase 모드는 지정을 해제합니다." },
             { "help.spawnEdit", "ISpawner 프리팹을 지정하고 씬을 클릭해 스포너를 배치합니다. Remove 모드는 임계 거리 내 가장 가까운 스포너를 제거합니다." },
@@ -181,6 +183,7 @@ namespace WorldBuilder.Editor
         {
             { "tool.meshEdit", "Mesh Edit" },
             { "tool.prefabBrush", "Prefab Brush" },
+            { "tool.meshSculpt", "Mesh Sculpt" },
             { "tool.terrainPaint", "Terrain Painting" },
             { "tool.biomeSetter", "Biome Setter" },
             { "tool.spawnEdit", "Spawn Edit" },
@@ -245,6 +248,7 @@ namespace WorldBuilder.Editor
             { "help.title", "Usage" },
             { "help.meshEdit", "Assign a MeshFilter, then drag vertices in the scene to edit. Shift-drag to box-select; selected vertices move together as a group." },
             { "help.prefabBrush", "Fill the prefab list and click/drag in the scene to scatter prefabs within the brush radius. Erase mode deletes prefab instances inside the radius." },
+            { "help.meshSculpt", "Sculpt placed map meshes like Blender: pick a brush, then click and drag in the scene. The mesh is subdivided under the brush, and the first stroke swaps in an editable copy (Assets/008_WorldBuilder/Sculpted) so the source model is untouched. Ctrl+Z undoes a stroke." },
             { "help.terrainPaint", "Assign a MeshRenderer and paint in the scene to blend vertex colors with the brush. Adjust radius, strength and color." },
             { "help.biomeSetter", "Pick a biome and chunk size, then click in the scene to assign a biome to a chunk. Erase mode removes the assignment." },
             { "help.spawnEdit", "Assign an ISpawner prefab and click in the scene to place spawners. Remove mode deletes the nearest spawner within the threshold distance." },

@@ -55,6 +55,7 @@ namespace WorldBuilder.Editor
 
             WorldBuilderToolRegistry.Register(new MeshEditTool());
             WorldBuilderToolRegistry.Register(new PrefabBrushTool(prefabBrushBiomeMap));
+            WorldBuilderToolRegistry.Register(new MeshSculpt.MeshSculptTool());
             WorldBuilderToolRegistry.Register(new TerrainPaintTool());
             WorldBuilderToolRegistry.Register(new BiomeSetterTool(biomeMap, biomeProvider));
             WorldBuilderToolRegistry.Register(new SpawnEditTool(spawnerQuery));
