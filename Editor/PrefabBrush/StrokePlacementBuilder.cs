@@ -27,7 +27,7 @@ namespace WorldBuilder.Editor.PrefabBrush
 
             for (int i = 0; i < stroke.density; i++)
             {
-                GameObject prefab = PickWeighted(valid, totalWeight, rng);
+                PrefabEntry entry = PickWeighted(valid, totalWeight, rng);
 
                 double angle = rng.NextDouble() * Math.PI * 2.0;
                 double distance = Math.Sqrt(rng.NextDouble()) * stroke.radius;
@@ -42,21 +42,22 @@ namespace WorldBuilder.Editor.PrefabBrush
                 }
 
                 float yaw = (float)(rng.NextDouble() * 360.0);
-                float scale = Mathf.Lerp(settings.scaleRange.x, settings.scaleRange.y, (float)rng.NextDouble());
+                Vector2 scaleRange = entry.ScaleRange(settings);
+                float scale = Mathf.Lerp(scaleRange.x, scaleRange.y, (float)rng.NextDouble());
 
                 WorldBuilder.Runtime.Data.BiomeType biome = biomeMap != null
                     ? biomeMap.GetBiome(calculator.ToChunkCoord(position, settings.chunkSize))
                     : WorldBuilder.Runtime.Data.BiomeType.Forest;
                 if (!PassesMask(settings.mask, position, normal, biome)) continue;
 
-                Quaternion rotation = settings.alignToNormal
+                Quaternion rotation = entry.AlignToNormal(settings)
                     ? Quaternion.FromToRotation(Vector3.up, normal)
                     : Quaternion.identity;
-                if (settings.randomYaw) rotation *= Quaternion.AngleAxis(yaw, Vector3.up);
+                if (entry.RandomYaw(settings)) rotation *= Quaternion.AngleAxis(yaw, Vector3.up);
 
                 BrushContext context = new BrushContext
                 {
-                    position = position,
+                    position = position + rotation * Vector3.up * entry.heightOffset,
                     normal = normal,
                     rotation = rotation,
                     scale = Vector3.one * scale
@@ -88,7 +89,7 @@ namespace WorldBuilder.Editor.PrefabBrush
 
                 placements.Add(new BrushPlacement
                 {
-                    prefab = prefab,
+                    prefab = entry.prefab,
                     position = context.position,
                     rotation = context.rotation,
                     scale = context.scale
@@ -134,16 +135,16 @@ namespace WorldBuilder.Editor.PrefabBrush
             return valid;
         }
 
-        private static GameObject PickWeighted(List<PrefabEntry> valid, float totalWeight, System.Random rng)
+        private static PrefabEntry PickWeighted(List<PrefabEntry> valid, float totalWeight, System.Random rng)
         {
             double roll = rng.NextDouble() * totalWeight;
             double cumulative = 0.0;
             for (int i = 0; i < valid.Count; i++)
             {
                 cumulative += valid[i].weight;
-                if (roll <= cumulative) return valid[i].prefab;
+                if (roll <= cumulative) return valid[i];
             }
-            return valid[valid.Count - 1].prefab;
+            return valid[valid.Count - 1];
         }
     }
 }

@@ -17,6 +17,8 @@ namespace WorldBuilder.Editor.PrefabBrush
         public bool randomYaw = true;
         public Vector2 scaleRange = new Vector2(1f, 1f);
         public bool duplicateSharedScriptableObjects = true;
+        [Tooltip("Erase only instances of the palette's prefabs, so the eraser never removes hand-placed objects.")]
+        public bool eraseOnlyPaletteModels = true;
 
         public List<PrefabEntry> prefabEntries = new List<PrefabEntry>();
         public BrushMask mask = new BrushMask();

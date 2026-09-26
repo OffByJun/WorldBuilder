@@ -10,6 +10,18 @@ namespace WorldBuilder.Editor.PrefabBrush
         public GameObject prefab;
         public float weight;
         public EnvironmentType envType;
+
+        [Tooltip("Use this entry's own scale and rotation instead of the brush-wide values.")]
+        public bool customTransform;
+        public Vector2 scaleRange;
+        public bool randomYaw;
+        public bool alignToNormal;
+        [Tooltip("Metres each instance is lifted (negative sinks it) along its own up axis.")]
+        public float heightOffset;
+
+        public Vector2 ScaleRange(PrefabBrushSettings settings) => customTransform ? scaleRange : settings.scaleRange;
+        public bool RandomYaw(PrefabBrushSettings settings) => customTransform ? randomYaw : settings.randomYaw;
+        public bool AlignToNormal(PrefabBrushSettings settings) => customTransform ? alignToNormal : settings.alignToNormal;
     }
 
     [Serializable]
