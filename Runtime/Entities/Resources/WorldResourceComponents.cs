@@ -82,12 +82,21 @@ namespace WorldBuilder.Entities.Resources
         public int MaximumItemCount;
         public Unity.Mathematics.float3 HalfExtents;
         public float RaycastHeight;
+        public float MinimumGroundNormalY;
         public float SpawnInterval;
         public double NextSpawnTime;
         public int MaximumAlive;
         public int SpawnPerTick;
         public uint RandomState;
     }
+
+    [InternalBufferCapacity(12)]
+    public struct ResourceFieldSpawnPoint : IBufferElementData
+    {
+        public Unity.Mathematics.float2 Value;
+    }
+
+    public struct ResourceSpawnTerrain : IComponentData { }
 
     [InternalBufferCapacity(16)]
     public struct ResourceFieldSpawnedEntity : IBufferElementData

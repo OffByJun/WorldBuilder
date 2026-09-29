@@ -1,6 +1,8 @@
 using Unity.Burst;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Physics;
 using Unity.Transforms;
 using WorldBuilder.Entities.Systems;
 
@@ -15,6 +17,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<WorldEntityRuntimeConfig>();
+            state.RequireForUpdate<PhysicsWorldSingleton>();
         }
 
         [BurstCompile]
@@ -24,7 +27,8 @@ namespace WorldBuilder.Entities.Creatures.Systems
             {
                 DeltaTime = SystemAPI.Time.DeltaTime,
                 ElapsedTime = SystemAPI.Time.ElapsedTime,
-                Config = SystemAPI.GetSingleton<WorldEntityRuntimeConfig>()
+                Config = SystemAPI.GetSingleton<WorldEntityRuntimeConfig>(),
+                CollisionWorld = SystemAPI.GetSingleton<PhysicsWorldSingleton>().CollisionWorld
             }.ScheduleParallel(state.Dependency);
         }
 
@@ -35,8 +39,10 @@ namespace WorldBuilder.Entities.Creatures.Systems
             public float DeltaTime;
             public double ElapsedTime;
             public WorldEntityRuntimeConfig Config;
+            [ReadOnly] public CollisionWorld CollisionWorld;
 
-            private void Execute(ref LocalTransform transform, ref CreatureSwim swim, ref CreatureRandom seed,
+            private void Execute(Entity entity, ref LocalTransform transform, ref CreatureSwim swim,
+                ref CreatureRandom seed,
                 in CreatureAlarm alarm, in CreatureMoveOrder order, EnabledRefRO<CreatureMoveOrder> hasOrder,
                 EnabledRefRO<CreatureCaptured> captured, EnabledRefRO<WorldEntityActive> active)
             {
@@ -56,6 +62,9 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 {
                     swim.TargetPoint = order.Target;
                     swim.NextRepathTime = ElapsedTime;
+                    if (CreatureSwimMath.HasArrived(transform.Position, order.Target,
+                            math.max(0f, order.ArriveRadius)))
+                        return;
                     speed *= math.max(0.1f, order.SpeedMultiplier);
                 }
                 else if (CreatureSwimMath.ShouldRepath(swim, transform.Position, ElapsedTime))
@@ -73,8 +82,55 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 float3 next = step.Position;
                 if (!alarmed && !hasOrder.ValueRO)
                     next = CreatureSwimMath.ConstrainToHomeRegion(next, swim, Config);
+                next = KeepAboveGround(entity, next, transform.Scale);
                 transform.Position = next;
                 transform.Rotation = step.Rotation;
+            }
+
+            private float3 KeepAboveGround(Entity entity, float3 position, float scale)
+            {
+                const float probeHeight = 2f;
+                const float probeDepth = 6f;
+                RaycastInput input = new RaycastInput
+                {
+                    Start = position + math.up() * probeHeight,
+                    End = position - math.up() * probeDepth,
+                    Filter = CollisionFilter.Default
+                };
+                GroundHitCollector collector = new GroundHitCollector(entity);
+                if (!CollisionWorld.CastRay(input, ref collector)) return position;
+
+                float clearance = math.max(.35f, math.abs(scale) * .5f);
+                position.y = math.max(position.y, collector.Hit.Position.y + clearance);
+                return position;
+            }
+        }
+
+        private struct GroundHitCollector : ICollector<Unity.Physics.RaycastHit>
+        {
+            private readonly Entity ignoredEntity;
+
+            public GroundHitCollector(Entity ignoredEntity)
+            {
+                this.ignoredEntity = ignoredEntity;
+                Hit = default;
+                MaxFraction = 1f;
+                NumHits = 0;
+            }
+
+            public bool EarlyOutOnFirstHit => false;
+            public float MaxFraction { get; private set; }
+            public int NumHits { get; private set; }
+            public Unity.Physics.RaycastHit Hit { get; private set; }
+
+            public bool AddHit(Unity.Physics.RaycastHit hit)
+            {
+                if (hit.Entity == ignoredEntity || hit.SurfaceNormal.y < .35f) return false;
+
+                Hit = hit;
+                MaxFraction = hit.Fraction;
+                NumHits = 1;
+                return true;
             }
         }
     }
