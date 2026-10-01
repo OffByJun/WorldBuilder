@@ -176,8 +176,6 @@ namespace WorldBuilder.Entities.Creatures
 
             bool isTamed = entityManager.HasComponent<CreatureTaming>(target) &&
                            entityManager.GetComponentData<CreatureTaming>(target).IsTamed != 0;
-            bool isCustomized = entityManager.HasComponent<CreatureCustomized>(target) &&
-                                entityManager.IsComponentEnabled<CreatureCustomized>(target);
             bool settled = entityManager.HasComponent<CreatureSettled>(target) &&
                            entityManager.IsComponentEnabled<CreatureSettled>(target);
             int members = entityManager.HasBuffer<CreatureHabitatMember>(habitat)
@@ -185,7 +183,7 @@ namespace WorldBuilder.Entities.Creatures
                 : 0;
 
             failure = CreatureSettlementRules.Evaluate(entityManager.GetComponentData<Creature>(target), isTamed,
-                isCustomized, settled, entityManager.GetComponentData<CreatureEnvironmentNeeds>(target),
+                settled, entityManager.GetComponentData<CreatureEnvironmentNeeds>(target),
                 entityManager.GetComponentData<CreatureHabitat>(habitat), members);
             return true;
         }

@@ -15,7 +15,6 @@ namespace WorldBuilder.Entities.Creatures
         public quaternion Rotation;
         public float3 Home;
         public CreatureGrade Grade;
-        public CreatureAppearance Appearance;
         public float Affinity;
         public byte TameAttempts;
         public byte IsTamed;
@@ -64,8 +63,6 @@ namespace WorldBuilder.Entities.Creatures
                     Home = transform.Position,
                     Grade = creature.Grade
                 };
-                if (entityManager.HasComponent<CreatureAppearance>(entity))
-                    snapshot.Appearance = entityManager.GetComponentData<CreatureAppearance>(entity);
                 if (entityManager.HasComponent<CreatureSwim>(entity))
                     snapshot.Home = entityManager.GetComponentData<CreatureSwim>(entity).Home;
                 if (entityManager.HasComponent<CreatureAffinity>(entity))
@@ -104,7 +101,6 @@ namespace WorldBuilder.Entities.Creatures
                     Rotation = snapshot.Rotation,
                     Home = snapshot.Home,
                     Grade = snapshot.Grade,
-                    Appearance = snapshot.Appearance,
                     Affinity = snapshot.Affinity,
                     TameAttempts = snapshot.TameAttempts,
                     IsTamed = snapshot.IsTamed,
@@ -112,7 +108,6 @@ namespace WorldBuilder.Entities.Creatures
                         ? (uint)snapshot.Identity.Low
                         : (uint)(i + 1)),
                     StateFlags = CreatureSpawnRequestFlags.ExplicitGrade |
-                                 CreatureSpawnRequestFlags.ExplicitAppearance |
                                  CreatureSpawnRequestFlags.ExplicitHome |
                                  CreatureSpawnRequestFlags.ExplicitIdentity |
                                  CreatureSpawnRequestFlags.ExplicitAffinity |

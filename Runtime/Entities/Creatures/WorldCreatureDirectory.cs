@@ -146,9 +146,6 @@ namespace WorldBuilder.Entities.Creatures
                 !entityManager.HasComponent<LocalTransform>(entity)) return false;
 
             Creature creature = entityManager.GetComponentData<Creature>(entity);
-            CreatureAppearance appearance = entityManager.HasComponent<CreatureAppearance>(entity)
-                ? entityManager.GetComponentData<CreatureAppearance>(entity)
-                : default;
             WorldEntityIdentity identity = entityManager.HasComponent<WorldEntityIdentity>(entity)
                 ? entityManager.GetComponentData<WorldEntityIdentity>(entity)
                 : default;
@@ -169,7 +166,7 @@ namespace WorldBuilder.Entities.Creatures
                            entityManager.IsComponentEnabled<WorldEntityActive>(entity));
 
             record = new CreatureRecord(entity, identity, prefabId, creature.DisplayName.ToString(), creature.Grade,
-                creature.SizeClass, creature.Personality, appearance,
+                creature.SizeClass, creature.Personality,
                 entityManager.GetComponentData<LocalTransform>(entity).Position, region, affinity.Value,
                 affinity.MaximumValue, taming.AttemptCount, taming.IsTamed != 0, active);
             return true;

@@ -39,9 +39,6 @@ namespace WorldBuilder.Entities.Creatures
             return new CreatureGradeDefinition
             {
                 Grade = grade,
-                HsvMinimum = new float4(0f, 0.25f + 0.4f * tier, 0.55f + 0.35f * tier, 1f),
-                HsvMaximum = new float4(1f, 0.45f + 0.5f * tier, 0.75f + 0.25f * tier, 1f),
-                SpawnSaturationScale = 0.18f + 0.07f * tier,
                 SpeedMultiplier = 1f + 0.2f * tier,
                 SizeMultiplier = 1f + 0.35f * tier,
                 ValueMultiplier = 1f + 3f * tier,
@@ -60,9 +57,6 @@ namespace WorldBuilder.Entities.Creatures
 
         public static CreatureGradeDefinition Normalize(CreatureGradeDefinition definition)
         {
-            definition.HsvMinimum = math.saturate(definition.HsvMinimum);
-            definition.HsvMaximum = math.max(definition.HsvMinimum, math.saturate(definition.HsvMaximum));
-            definition.SpawnSaturationScale = math.saturate(definition.SpawnSaturationScale);
             definition.SpeedMultiplier = math.max(0.01f, definition.SpeedMultiplier);
             definition.SizeMultiplier = math.max(0.01f, definition.SizeMultiplier);
             definition.ValueMultiplier = math.max(0f, definition.ValueMultiplier);
@@ -100,33 +94,6 @@ namespace WorldBuilder.Entities.Creatures
             for (int i = 0; i < GradeCount; i++)
                 if (Contains(allowed, GradeAt(i))) return GradeAt(i);
             return CreatureGrade.Common;
-        }
-
-        public static CreatureAppearance SpawnAppearance(in CreatureGradeDefinition definition, ref Random random)
-        {
-            float4 hsva = random.NextFloat4(definition.HsvMinimum, definition.HsvMaximum);
-            float3 muted = new float3(hsva.x, hsva.y * definition.SpawnSaturationScale, hsva.z);
-            float4 body = new float4(HsvToRgb(muted), math.saturate(hsva.w));
-            float4 shade = new float4(HsvToRgb(new float3(muted.x, muted.y, math.saturate(muted.z * 0.82f))),
-                body.w);
-            float4 accent = new float4(HsvToRgb(new float3(muted.x, muted.y, math.saturate(muted.z * 1.12f))),
-                body.w);
-            return new CreatureAppearance
-            {
-                Primary = body,
-                Secondary = shade,
-                Accent = accent,
-                PatternColor = accent,
-                Pattern = CreaturePatternKind.None,
-                PatternStrength = 0f
-            };
-        }
-
-        public static float3 HsvToRgb(float3 hsv)
-        {
-            float3 offsets = new float3(1f, 2f / 3f, 1f / 3f);
-            float3 wave = math.abs(math.frac(hsv.xxx + offsets) * 6f - 3f);
-            return math.saturate(hsv.z * math.lerp(new float3(1f), math.saturate(wave - 1f), math.saturate(hsv.y)));
         }
 
         public static int RewardCount(int baseCount, float valueMultiplier)

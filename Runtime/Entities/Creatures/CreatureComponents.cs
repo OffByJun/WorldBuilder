@@ -43,38 +43,7 @@ namespace WorldBuilder.Entities.Creatures
         None = 0,
         Capture = 1 << 0,
         Scan = 1 << 1,
-        Feed = 1 << 2,
-        Recolor = 1 << 3
-    }
-
-    public enum CreatureColorSlot : byte
-    {
-        Primary = 0,
-        Secondary = 1,
-        Accent = 2,
-        Pattern = 3
-    }
-
-    public enum CreaturePatternKind : byte
-    {
-        None = 0,
-        Stripes = 1,
-        Spots = 2,
-        TwoTone = 3,
-        Gradient = 4,
-        Special = 5
-    }
-
-    [Flags]
-    public enum CreaturePatternMask : byte
-    {
-        None = 0,
-        Stripes = 1 << 0,
-        Spots = 1 << 1,
-        TwoTone = 1 << 2,
-        Gradient = 1 << 3,
-        Special = 1 << 4,
-        All = Stripes | Spots | TwoTone | Gradient | Special
+        Feed = 1 << 2
     }
 
     public enum CreatureCaptureFailure : byte
@@ -99,16 +68,6 @@ namespace WorldBuilder.Entities.Creatures
         AlreadyTamed
     }
 
-    public enum CreatureRecolorFailure : byte
-    {
-        None,
-        InvalidTarget,
-        NotRecolorable,
-        NotTamed,
-        UnknownPalette,
-        UnsupportedPattern
-    }
-
     public struct Creature : IComponentData
     {
         public FixedString64Bytes DisplayName;
@@ -121,29 +80,6 @@ namespace WorldBuilder.Entities.Creatures
     public struct CreatureRandom : IComponentData
     {
         public uint State;
-    }
-
-    public struct CreatureAppearance : IComponentData
-    {
-        public float4 Primary;
-        public float4 Secondary;
-        public float4 Accent;
-        public float4 PatternColor;
-        public CreaturePatternKind Pattern;
-        public float PatternStrength;
-    }
-
-    public struct CreatureAppearanceDirty : IComponentData, IEnableableComponent { }
-
-    public struct CreatureSupportedPatterns : IComponentData
-    {
-        public CreaturePatternMask Value;
-    }
-
-    [InternalBufferCapacity(4)]
-    public struct CreatureAppearanceTarget : IBufferElementData
-    {
-        public Entity Value;
     }
 
     public struct CreatureSwim : IComponentData
@@ -213,21 +149,11 @@ namespace WorldBuilder.Entities.Creatures
     public struct CreatureGradeDefinition : IBufferElementData
     {
         public CreatureGrade Grade;
-        public float4 HsvMinimum;
-        public float4 HsvMaximum;
-        public float SpawnSaturationScale;
         public float SpeedMultiplier;
         public float SizeMultiplier;
         public float ValueMultiplier;
         public float TameChanceMultiplier;
         public float SpawnWeight;
-    }
-
-    [InternalBufferCapacity(32)]
-    public struct CreaturePaletteEntry : IBufferElementData
-    {
-        public int PaletteId;
-        public float4 Color;
     }
 
     [InternalBufferCapacity(0)]
@@ -240,7 +166,6 @@ namespace WorldBuilder.Entities.Creatures
         public quaternion Rotation;
         public float3 Home;
         public CreatureGrade Grade;
-        public CreatureAppearance Appearance;
         public float Affinity;
         public byte TameAttempts;
         public byte IsTamed;
@@ -253,7 +178,6 @@ namespace WorldBuilder.Entities.Creatures
     {
         None = 0,
         ExplicitGrade = 1 << 0,
-        ExplicitAppearance = 1 << 1,
         ExplicitHome = 1 << 2,
         ExplicitIdentity = 1 << 3,
         ExplicitAffinity = 1 << 4,
@@ -327,34 +251,6 @@ namespace WorldBuilder.Entities.Creatures
         public byte IsTamed;
     }
 
-    [InternalBufferCapacity(0)]
-    public struct CreatureRecolorRequest : IBufferElementData
-    {
-        public uint RequestId;
-        public Entity Target;
-        public CreatureColorSlot Slot;
-        public int PaletteId;
-    }
-
-    [InternalBufferCapacity(0)]
-    public struct CreaturePatternRequest : IBufferElementData
-    {
-        public uint RequestId;
-        public Entity Target;
-        public CreaturePatternKind Pattern;
-        public int PaletteId;
-        public float Strength;
-    }
-
-    [InternalBufferCapacity(0)]
-    public struct CreatureRecolorResult : IBufferElementData
-    {
-        public uint RequestId;
-        public Entity Target;
-        public CreatureRecolorFailure Failure;
-        public CreatureAppearance Appearance;
-    }
-
     public readonly struct CreatureInteractionInfo
     {
         public readonly string DisplayName;
@@ -362,8 +258,6 @@ namespace WorldBuilder.Entities.Creatures
         public readonly CreatureSizeClass SizeClass;
         public readonly CreaturePersonality Personality;
         public readonly CreatureInteractionMask Interactions;
-        public readonly CreatureAppearance Appearance;
-        public readonly CreaturePatternMask SupportedPatterns;
         public readonly int CaptureItemId;
         public readonly int RequiredToolItemId;
         public readonly byte MinimumToolTier;
@@ -374,8 +268,7 @@ namespace WorldBuilder.Entities.Creatures
         public readonly bool IsTamed;
         public readonly bool IsAlarmed;
 
-        public CreatureInteractionInfo(in Creature creature, in CreatureAppearance appearance,
-            CreaturePatternMask supportedPatterns, in CreatureCapture capture, in CreatureAffinity affinity,
+        public CreatureInteractionInfo(in Creature creature, in CreatureCapture capture, in CreatureAffinity affinity,
             in CreatureTaming taming, bool isAlarmed)
         {
             DisplayName = creature.DisplayName.ToString();
@@ -383,8 +276,6 @@ namespace WorldBuilder.Entities.Creatures
             SizeClass = creature.SizeClass;
             Personality = creature.Personality;
             Interactions = creature.Interactions;
-            Appearance = appearance;
-            SupportedPatterns = supportedPatterns;
             CaptureItemId = capture.ItemId;
             RequiredToolItemId = capture.RequiredToolItemId;
             MinimumToolTier = capture.MinimumToolTier;
@@ -399,6 +290,5 @@ namespace WorldBuilder.Entities.Creatures
         public bool CanCapture => (Interactions & CreatureInteractionMask.Capture) != 0;
         public bool CanScan => (Interactions & CreatureInteractionMask.Scan) != 0;
         public bool CanFeed => (Interactions & CreatureInteractionMask.Feed) != 0;
-        public bool CanRecolor => (Interactions & CreatureInteractionMask.Recolor) != 0;
     }
 }

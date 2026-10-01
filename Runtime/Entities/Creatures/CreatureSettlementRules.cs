@@ -16,12 +16,10 @@ namespace WorldBuilder.Entities.Creatures
 
     public static class CreatureSettlementRules
     {
-        public static CreatureSettleFailure Evaluate(in Creature creature, bool isTamed, bool isCustomized,
-            bool alreadySettled, in CreatureEnvironmentNeeds needs, in CreatureHabitat habitat, int memberCount)
+        public static CreatureSettleFailure Evaluate(in Creature creature, bool isTamed, bool alreadySettled, in CreatureEnvironmentNeeds needs, in CreatureHabitat habitat, int memberCount)
         {
             if (alreadySettled) return CreatureSettleFailure.AlreadySettled;
             if (!isTamed) return CreatureSettleFailure.NotTamed;
-            if (!isCustomized) return CreatureSettleFailure.NotCustomized;
             if (creature.SizeClass == CreatureSizeClass.Large) return CreatureSettleFailure.SizeClassNotAllowed;
             if (creature.SizeClass == CreatureSizeClass.Medium && habitat.AllowMedium == 0)
                 return CreatureSettleFailure.SizeClassNotAllowed;
@@ -32,25 +30,14 @@ namespace WorldBuilder.Entities.Creatures
         }
 
         /// <summary>
-        /// The species decides which roles are available; colour and pattern only tune them.
-        /// A creature never loses its base role for lacking a specific colour.
+        /// The species decides which roles are available and how fast and how much it works; a habitat that
+        /// provides the creature's preferred environment speeds it up.
         /// </summary>
-        public static CreatureWorkTraits Traits(in CreatureRoleAptitude aptitude, in CreatureAppearance appearance,
-            in CreatureEnvironmentNeeds needs, in CreatureHabitat habitat)
+        public static CreatureWorkTraits Traits(in CreatureRoleAptitude aptitude, in CreatureEnvironmentNeeds needs,
+            in CreatureHabitat habitat)
         {
             float speed = math.max(0.1f, aptitude.BaseWorkSpeed);
             int carry = math.max(1, aptitude.BaseCarryCapacity);
-
-            float saturation = Saturation(appearance.Primary.xyz);
-            float brightness = math.cmax(appearance.Primary.xyz);
-            speed *= 1f + 0.15f * saturation;
-            if (appearance.Pattern != CreaturePatternKind.None)
-            {
-                speed *= 1f + 0.10f * math.saturate(appearance.PatternStrength);
-                if (appearance.Pattern == CreaturePatternKind.Stripes ||
-                    appearance.Pattern == CreaturePatternKind.Spots) carry += 1;
-            }
-            if (brightness >= 0.75f) carry += 1;
 
             bool preferredMet = needs.Preferred == CreatureEnvironmentMask.None ||
                                 (needs.Preferred & habitat.Provided) == needs.Preferred;
@@ -73,11 +60,5 @@ namespace WorldBuilder.Entities.Creatures
             return math.all(delta <= habitat.HalfExtents);
         }
 
-        private static float Saturation(float3 rgb)
-        {
-            float maximum = math.cmax(rgb);
-            float minimum = math.cmin(rgb);
-            return maximum <= 1e-4f ? 0f : (maximum - minimum) / maximum;
-        }
     }
 }

@@ -5,7 +5,6 @@ using Unity.Transforms;
 namespace WorldBuilder.Entities.Creatures.Systems
 {
     [UpdateInGroup(typeof(SimulationSystemGroup), OrderFirst = true)]
-    [UpdateAfter(typeof(CreatureRecolorSystem))]
     public partial struct CreatureSettlementSystem : ISystem
     {
         public void OnCreate(ref SystemState state)
@@ -52,11 +51,9 @@ namespace WorldBuilder.Entities.Creatures.Systems
 
             bool isTamed = entityManager.HasComponent<CreatureTaming>(request.Target) &&
                            entityManager.GetComponentData<CreatureTaming>(request.Target).IsTamed != 0;
-            bool isCustomized = entityManager.HasComponent<CreatureCustomized>(request.Target) &&
-                                entityManager.IsComponentEnabled<CreatureCustomized>(request.Target);
             bool alreadySettled = entityManager.IsComponentEnabled<CreatureSettled>(request.Target);
 
-            CreatureSettleFailure failure = CreatureSettlementRules.Evaluate(creature, isTamed, isCustomized,
+            CreatureSettleFailure failure = CreatureSettlementRules.Evaluate(creature, isTamed,
                 alreadySettled, needs, habitat, members.Length);
             if (failure != CreatureSettleFailure.None)
             {
@@ -65,8 +62,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
             }
 
             CreatureRoleAptitude aptitude = entityManager.GetComponentData<CreatureRoleAptitude>(request.Target);
-            CreatureAppearance appearance = entityManager.GetComponentData<CreatureAppearance>(request.Target);
-            CreatureWorkTraits traits = CreatureSettlementRules.Traits(aptitude, appearance, needs, habitat);
+            CreatureWorkTraits traits = CreatureSettlementRules.Traits(aptitude, needs, habitat);
 
             float3 center = entityManager.GetComponentData<LocalTransform>(request.Habitat).Position;
             CreatureRandom seed = entityManager.GetComponentData<CreatureRandom>(request.Target);
@@ -179,7 +175,6 @@ namespace WorldBuilder.Entities.Creatures.Systems
                entityManager.HasComponent<CreatureWorkState>(target) &&
                entityManager.HasComponent<CreatureRoleAptitude>(target) &&
                entityManager.HasComponent<CreatureEnvironmentNeeds>(target) &&
-               entityManager.HasComponent<CreatureAppearance>(target) &&
                entityManager.HasComponent<CreatureRandom>(target) &&
                entityManager.HasComponent<CreatureSwim>(target);
 

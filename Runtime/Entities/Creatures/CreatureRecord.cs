@@ -11,7 +11,6 @@ namespace WorldBuilder.Entities.Creatures
         public readonly CreatureGrade Grade;
         public readonly CreatureSizeClass SizeClass;
         public readonly CreaturePersonality Personality;
-        public readonly CreatureAppearance Appearance;
         public readonly float3 Position;
         public readonly int2 Region;
         public readonly float Affinity;
@@ -22,7 +21,7 @@ namespace WorldBuilder.Entities.Creatures
 
         public CreatureRecord(Unity.Entities.Entity entity, WorldEntityIdentity identity, int prefabId,
             string displayName, CreatureGrade grade, CreatureSizeClass sizeClass, CreaturePersonality personality,
-            in CreatureAppearance appearance, float3 position, int2 region, float affinity, float maximumAffinity,
+            float3 position, int2 region, float affinity, float maximumAffinity,
             byte tameAttempts, bool isTamed, bool isActive)
         {
             Entity = entity;
@@ -32,7 +31,6 @@ namespace WorldBuilder.Entities.Creatures
             Grade = grade;
             SizeClass = sizeClass;
             Personality = personality;
-            Appearance = appearance;
             Position = position;
             Region = region;
             Affinity = affinity;

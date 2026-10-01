@@ -49,10 +49,6 @@ namespace WorldBuilder.Entities.Creatures.Systems
                         ? request.Grade
                         : CreatureGradeRules.SelectGrade(definitions, CreatureGradeMask.All, ref random);
                 CreatureGradeDefinition definition = CreatureGradeRules.Resolve(definitions, grade);
-                CreatureAppearance appearance =
-                    (request.StateFlags & CreatureSpawnRequestFlags.ExplicitAppearance) != 0
-                        ? request.Appearance
-                        : CreatureGradeRules.SpawnAppearance(definition, ref random);
 
                 Entity instance = commands.Instantiate(prefab);
                 WorldEntityIdentity identity = request.Identity;
@@ -75,8 +71,6 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 creature.Grade = grade;
                 commands.SetComponent(instance, creature);
                 commands.SetComponent(instance, new CreatureRandom { State = random.NextUInt() });
-                commands.SetComponent(instance, appearance);
-                commands.SetComponentEnabled<CreatureAppearanceDirty>(instance, true);
 
                 if (state.EntityManager.HasComponent<CreatureSwim>(prefab))
                 {

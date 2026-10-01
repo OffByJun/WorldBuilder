@@ -38,7 +38,6 @@ namespace WorldBuilder.Entities.Creatures
         None,
         InvalidTarget,
         NotTamed,
-        NotCustomized,
         InvalidHabitat,
         HabitatFull,
         EnvironmentMissing,
@@ -107,8 +106,6 @@ namespace WorldBuilder.Entities.Creatures
         public int ItemId;
         public float Weight;
     }
-
-    public struct CreatureCustomized : IComponentData, IEnableableComponent { }
 
     public struct CreatureSettlement : IComponentData
     {

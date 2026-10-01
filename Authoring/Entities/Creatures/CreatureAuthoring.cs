@@ -15,18 +15,8 @@ namespace WorldBuilder.Entities.Creatures.Authoring
         [SerializeField] private CreatureSizeClass sizeClass = CreatureSizeClass.Small;
         [SerializeField] private CreaturePersonality personality = CreaturePersonality.Neutral;
         [SerializeField] private CreatureInteractionMask interactions =
-            CreatureInteractionMask.Capture | CreatureInteractionMask.Scan | CreatureInteractionMask.Feed |
-            CreatureInteractionMask.Recolor;
+            CreatureInteractionMask.Capture | CreatureInteractionMask.Scan | CreatureInteractionMask.Feed;
         [SerializeField] private uint randomSeed = 1;
-
-        [Header("Appearance")]
-        [Tooltip("Patterns this species model actually supports.")]
-        [SerializeField] private CreaturePatternMask supportedPatterns = CreaturePatternMask.None;
-        [Tooltip("Only used when a spawn explicitly overrides the grade palette.")]
-        [SerializeField] private Color primaryColor = new Color(0.72f, 0.74f, 0.75f);
-        [SerializeField] private Color secondaryColor = new Color(0.58f, 0.60f, 0.62f);
-        [SerializeField] private Color accentColor = new Color(0.84f, 0.85f, 0.86f);
-        [SerializeField] private Color patternColor = new Color(0.35f, 0.36f, 0.38f);
 
         [Header("Swim")]
         [Min(0f), SerializeField] private float cruiseSpeed = 1.5f;
@@ -65,7 +55,7 @@ namespace WorldBuilder.Entities.Creatures.Authoring
         [Min(0.1f), SerializeField] private float approachDistance = 2.5f;
 
         [Header("Settlement")]
-        [Tooltip("Roles this species can perform once settled. Colour and pattern only tune them.")]
+        [Tooltip("Roles this species can perform once settled.")]
         [SerializeField] private CreatureRole roles = CreatureRole.Gathering | CreatureRole.Hauling;
         [Min(0.1f), SerializeField] private float baseWorkSpeed = 1f;
         [Min(1), SerializeField] private int baseCarryCapacity = 1;
@@ -99,7 +89,7 @@ namespace WorldBuilder.Entities.Creatures.Authoring
             guaranteedAfterAttempts = Mathf.Clamp(guaranteedAfterAttempts, 1, 8);
             if (randomSeed == 0) randomSeed = 1;
             if (sizeClass == CreatureSizeClass.Large)
-                interactions &= ~(CreatureInteractionMask.Feed | CreatureInteractionMask.Recolor);
+                interactions &= ~CreatureInteractionMask.Feed;
         }
 
         private sealed class CreatureBaker : Baker<CreatureAuthoring>
@@ -107,19 +97,9 @@ namespace WorldBuilder.Entities.Creatures.Authoring
             public override void Bake(CreatureAuthoring authoring)
             {
                 Entity entity = GetEntity(TransformUsageFlags.Dynamic);
-                CreatureAppearance appearance = new CreatureAppearance
-                {
-                    Primary = ToFloat4(authoring.primaryColor),
-                    Secondary = ToFloat4(authoring.secondaryColor),
-                    Accent = ToFloat4(authoring.accentColor),
-                    PatternColor = ToFloat4(authoring.patternColor),
-                    Pattern = CreaturePatternKind.None,
-                    PatternStrength = 0f
-                };
-
                 CreatureInteractionMask interactions = authoring.interactions;
                 if (authoring.sizeClass == CreatureSizeClass.Large)
-                    interactions &= ~(CreatureInteractionMask.Feed | CreatureInteractionMask.Recolor);
+                    interactions &= ~CreatureInteractionMask.Feed;
 
                 AddComponent(entity, new Creature
                 {
@@ -133,10 +113,6 @@ namespace WorldBuilder.Entities.Creatures.Authoring
                 {
                     State = CreatureGradeRules.SanitizeSeed(authoring.randomSeed)
                 });
-                AddComponent(entity, appearance);
-                AddComponent(entity, new CreatureSupportedPatterns { Value = authoring.supportedPatterns });
-                AddComponent<CreatureAppearanceDirty>(entity);
-                SetComponentEnabled<CreatureAppearanceDirty>(entity, true);
 
                 AddComponent(entity, new CreatureSwim
                 {
@@ -198,8 +174,6 @@ namespace WorldBuilder.Entities.Creatures.Authoring
                     Required = authoring.requiredEnvironment,
                     Preferred = authoring.preferredEnvironment
                 });
-                AddComponent<CreatureCustomized>(entity);
-                SetComponentEnabled<CreatureCustomized>(entity, false);
                 AddComponent(entity, new CreatureSettlement());
                 AddComponent<CreatureSettled>(entity);
                 SetComponentEnabled<CreatureSettled>(entity, false);
@@ -212,38 +186,7 @@ namespace WorldBuilder.Entities.Creatures.Authoring
                     {
                         DespawnGraceSeconds = authoring.despawnGraceSeconds
                     });
-
-                BakeAppearanceTargets(authoring, entity, appearance);
             }
-
-            private void BakeAppearanceTargets(CreatureAuthoring authoring, Entity root,
-                in CreatureAppearance appearance)
-            {
-                Renderer[] renderers = GetComponentsInChildren<Renderer>();
-                AddBuffer<CreatureAppearanceTarget>(root);
-                for (int i = 0; i < renderers.Length; i++)
-                {
-                    Renderer renderer = renderers[i];
-                    if (renderer == null) continue;
-                    Entity target = GetEntity(renderer.gameObject, TransformUsageFlags.Renderable);
-                    if (target == Entity.Null || target != root) continue;
-
-                    AddComponent(target, new CreaturePrimaryColor { Value = appearance.Primary });
-                    AddComponent(target, new CreatureSecondaryColor { Value = appearance.Secondary });
-                    AddComponent(target, new CreatureAccentColor { Value = appearance.Accent });
-                    AddComponent(target, new CreaturePatternColor { Value = appearance.PatternColor });
-                    AddComponent(target, new CreaturePatternParams
-                    {
-                        Value = CreatureAppearanceRules.PatternParameters(appearance)
-                    });
-
-                    // A Baker may only mutate its primary entity and additional entities it
-                    // created. Child renderer entities belong to their own authoring objects;
-                    // attempting to add material properties to them aborts prefab baking.
-                }
-            }
-
-            private static float4 ToFloat4(Color color) => new float4(color.r, color.g, color.b, color.a);
         }
     }
 }
