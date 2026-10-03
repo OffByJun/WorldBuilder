@@ -97,6 +97,17 @@ namespace WorldBuilder.Entities.Creatures
             return true;
         }
 
+        /// <summary>Tells the simulation where the water surface is, so creatures stay under it.</summary>
+        public static bool TrySetWaterSurface(float height)
+        {
+            if (!TryGetRuntime(out EntityManager entityManager, out Entity runtime)) return false;
+            var surface = new CreatureWaterSurface { Height = height };
+            if (entityManager.HasComponent<CreatureWaterSurface>(runtime))
+                entityManager.SetComponentData(runtime, surface);
+            else entityManager.AddComponentData(runtime, surface);
+            return true;
+        }
+
         public static bool TrySpawn(int prefabId, Vector3 position, Quaternion rotation, uint seed = 0u)
             => Enqueue(prefabId, position, rotation, default, seed, CreatureSpawnRequestFlags.None);
 

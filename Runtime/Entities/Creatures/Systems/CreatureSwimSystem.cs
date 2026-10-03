@@ -23,12 +23,17 @@ namespace WorldBuilder.Entities.Creatures.Systems
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
+            float surface = SystemAPI.TryGetSingleton(out CreatureWaterSurface water)
+                ? water.Height
+                : float.PositiveInfinity;
             state.Dependency = new SwimJob
             {
+                WaterSurface = surface,
                 DeltaTime = SystemAPI.Time.DeltaTime,
                 ElapsedTime = SystemAPI.Time.ElapsedTime,
                 Config = SystemAPI.GetSingleton<WorldEntityRuntimeConfig>(),
-                CollisionWorld = SystemAPI.GetSingleton<PhysicsWorldSingleton>().CollisionWorld
+                CollisionWorld = SystemAPI.GetSingleton<PhysicsWorldSingleton>().CollisionWorld,
+                Creatures = SystemAPI.GetComponentLookup<CreatureAlarm>(true)
             }.ScheduleParallel(state.Dependency);
         }
 
@@ -39,7 +44,10 @@ namespace WorldBuilder.Entities.Creatures.Systems
             public float DeltaTime;
             public double ElapsedTime;
             public WorldEntityRuntimeConfig Config;
+            public float WaterSurface;
             [ReadOnly] public CollisionWorld CollisionWorld;
+            // Every swimmer carries an alarm, so this tells a creature's body apart from the seabed.
+            [ReadOnly] public ComponentLookup<CreatureAlarm> Creatures;
 
             private void Execute(Entity entity, ref LocalTransform transform, ref CreatureSwim swim,
                 ref CreatureRandom seed,
@@ -47,6 +55,10 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 EnabledRefRO<CreatureCaptured> captured, EnabledRefRO<WorldEntityActive> active)
             {
                 if (captured.ValueRO || !active.ValueRO) return;
+
+                // Swimmers live under the surface: nothing, not a flee, a follow order or a shove, takes one out of the water.
+                float ceiling = WaterSurface - math.max(.35f, math.abs(transform.Scale) * .5f);
+                transform.Position.y = math.min(transform.Position.y, ceiling);
 
                 bool alarmed = CreatureTamingRules.IsAlarmed(alarm, ElapsedTime);
                 float speed = swim.CruiseSpeed;
@@ -77,12 +89,16 @@ namespace WorldBuilder.Entities.Creatures.Systems
                     seed.State = CreatureGradeRules.SanitizeSeed(random.NextUInt());
                 }
 
+                // Aim at the water too, so a target above the surface does not keep a creature pressed against it.
+                swim.TargetPoint.y = math.min(swim.TargetPoint.y, ceiling);
+
                 CreatureSwimStep step = CreatureSwimMath.Advance(transform.Position, transform.Rotation,
                     swim.TargetPoint, speed, swim.TurnSpeedRadians, DeltaTime);
                 float3 next = step.Position;
                 if (!alarmed && !hasOrder.ValueRO)
                     next = CreatureSwimMath.ConstrainToHomeRegion(next, swim, Config);
                 next = KeepAboveGround(entity, next, transform.Scale);
+                next.y = math.min(next.y, ceiling);
                 transform.Position = next;
                 transform.Rotation = step.Rotation;
             }
@@ -97,7 +113,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
                     End = position - math.up() * probeDepth,
                     Filter = CollisionFilter.Default
                 };
-                GroundHitCollector collector = new GroundHitCollector(entity);
+                GroundHitCollector collector = new GroundHitCollector(entity, Creatures);
                 if (!CollisionWorld.CastRay(input, ref collector)) return position;
 
                 float clearance = math.max(.35f, math.abs(scale) * .5f);
@@ -109,10 +125,12 @@ namespace WorldBuilder.Entities.Creatures.Systems
         private struct GroundHitCollector : ICollector<Unity.Physics.RaycastHit>
         {
             private readonly Entity ignoredEntity;
+            private readonly ComponentLookup<CreatureAlarm> creatures;
 
-            public GroundHitCollector(Entity ignoredEntity)
+            public GroundHitCollector(Entity ignoredEntity, ComponentLookup<CreatureAlarm> creatures)
             {
                 this.ignoredEntity = ignoredEntity;
+                this.creatures = creatures;
                 Hit = default;
                 MaxFraction = 1f;
                 NumHits = 0;
@@ -125,7 +143,10 @@ namespace WorldBuilder.Entities.Creatures.Systems
 
             public bool AddHit(Unity.Physics.RaycastHit hit)
             {
-                if (hit.Entity == ignoredEntity || hit.SurfaceNormal.y < .35f) return false;
+                // Other creatures are not ground. Treating them as ground lets two overlapping creatures lift each
+                // other over and over, a few metres every frame, until both are far above the water.
+                if (hit.Entity == ignoredEntity || hit.SurfaceNormal.y < .35f || creatures.HasComponent(hit.Entity))
+                    return false;
 
                 Hit = hit;
                 MaxFraction = hit.Fraction;

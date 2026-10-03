@@ -98,6 +98,15 @@ namespace WorldBuilder.Entities.Creatures
         public byte LeashToHomeRegion;
     }
 
+    /// <summary>
+    /// Singleton on the world-entity runtime entity: the height of the water surface. Creatures swim below it and
+    /// are never carried above it. Absent until the game reports a surface, in which case nothing is limited.
+    /// </summary>
+    public struct CreatureWaterSurface : IComponentData
+    {
+        public float Height;
+    }
+
     public struct CreatureAlarm : IComponentData
     {
         public float3 FleeFrom;

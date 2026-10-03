@@ -42,6 +42,12 @@ namespace WorldBuilder.Runtime.WorldTime
 
         public bool Paused { get; set; }
 
+        /// <summary>
+        /// Multiplies the sun's brightness on top of the time of day, so cloud cover or weather can dim the day
+        /// without fighting the clock for the light's intensity. 1 leaves the sun as the clock sets it.
+        /// </summary>
+        public float SunIntensityScale { get; set; } = 1f;
+
         public void SetHour(float value)
         {
             int before = Mathf.FloorToInt(hour);
@@ -110,7 +116,7 @@ namespace WorldBuilder.Runtime.WorldTime
 #endif
             float elevation01 = Mathf.InverseLerp(-90f, 90f, SunElevationDegrees());
             sunLight.transform.rotation = Quaternion.Euler(SunElevationDegrees(), 170f, 0f);
-            sunLight.intensity = Mathf.Lerp(nightLightIntensity, dayLightIntensity, elevation01);
+            sunLight.intensity = Mathf.Lerp(nightLightIntensity, dayLightIntensity, elevation01) * SunIntensityScale;
         }
     }
 }
