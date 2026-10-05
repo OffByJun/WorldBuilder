@@ -57,8 +57,11 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 if (captured.ValueRO || !active.ValueRO) return;
 
                 // Swimmers live under the surface: nothing, not a flee, a follow order or a shove, takes one out of the water.
-                float ceiling = WaterSurface - math.max(.35f, math.abs(transform.Scale) * .5f);
-                transform.Position.y = math.min(transform.Position.y, ceiling);
+                float radius = CreatureTerrainCollision.Radius(transform.Scale, swim.BodyRadius);
+                float ceiling = WaterSurface - radius - .05f;
+                if (!CreatureTerrainCollision.TryPlace(CollisionWorld, Creatures, entity, transform.Position,
+                        radius, WaterSurface, out float3 safeStart)) return;
+                transform.Position = safeStart;
 
                 bool alarmed = CreatureTamingRules.IsAlarmed(alarm, ElapsedTime);
                 float speed = swim.CruiseSpeed;
@@ -82,77 +85,40 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 else if (CreatureSwimMath.ShouldRepath(swim, transform.Position, ElapsedTime))
                 {
                     Random random = Random.CreateFromIndex(CreatureGradeRules.SanitizeSeed(seed.State));
-                    float3 target = CreatureSwimMath.NextWanderTarget(swim.Home, swim.WanderRadius,
-                        swim.VerticalRadius, ref random);
-                    swim.TargetPoint = CreatureSwimMath.ConstrainToHomeRegion(target, swim, Config);
+                    // Retry inaccessible/shallow destinations instead of keeping a point inside land.
+                    for (int attempt = 0; attempt < 8; attempt++)
+                    {
+                        float3 target = CreatureSwimMath.NextWanderTarget(swim.Home, swim.WanderRadius,
+                            swim.VerticalRadius, ref random);
+                        target = CreatureSwimMath.ConstrainToHomeRegion(target, swim, Config);
+                        if (!CreatureTerrainCollision.TryPlace(CollisionWorld, Creatures, entity, target,
+                                radius, WaterSurface, out float3 safeTarget)) continue;
+                        swim.TargetPoint = safeTarget;
+                        break;
+                    }
                     swim.NextRepathTime = ElapsedTime + swim.RepathIntervalSeconds;
                     seed.State = CreatureGradeRules.SanitizeSeed(random.NextUInt());
                 }
 
                 // Aim at the water too, so a target above the surface does not keep a creature pressed against it.
-                swim.TargetPoint.y = math.min(swim.TargetPoint.y, ceiling);
+                if (CreatureTerrainCollision.TryPlace(CollisionWorld, Creatures, entity, swim.TargetPoint,
+                        radius, WaterSurface, out float3 destination))
+                    swim.TargetPoint = destination;
+                else
+                    swim.TargetPoint = transform.Position;
 
                 CreatureSwimStep step = CreatureSwimMath.Advance(transform.Position, transform.Rotation,
                     swim.TargetPoint, speed, swim.TurnSpeedRadians, DeltaTime);
                 float3 next = step.Position;
                 if (!alarmed && !hasOrder.ValueRO)
                     next = CreatureSwimMath.ConstrainToHomeRegion(next, swim, Config);
-                next = KeepAboveGround(entity, next, transform.Scale);
                 next.y = math.min(next.y, ceiling);
+                next = CreatureTerrainCollision.Move(CollisionWorld, Creatures, entity, transform.Position,
+                    next, radius, WaterSurface);
                 transform.Position = next;
                 transform.Rotation = step.Rotation;
             }
 
-            private float3 KeepAboveGround(Entity entity, float3 position, float scale)
-            {
-                const float probeHeight = 2f;
-                const float probeDepth = 6f;
-                RaycastInput input = new RaycastInput
-                {
-                    Start = position + math.up() * probeHeight,
-                    End = position - math.up() * probeDepth,
-                    Filter = CollisionFilter.Default
-                };
-                GroundHitCollector collector = new GroundHitCollector(entity, Creatures);
-                if (!CollisionWorld.CastRay(input, ref collector)) return position;
-
-                float clearance = math.max(.35f, math.abs(scale) * .5f);
-                position.y = math.max(position.y, collector.Hit.Position.y + clearance);
-                return position;
-            }
-        }
-
-        private struct GroundHitCollector : ICollector<Unity.Physics.RaycastHit>
-        {
-            private readonly Entity ignoredEntity;
-            private readonly ComponentLookup<CreatureAlarm> creatures;
-
-            public GroundHitCollector(Entity ignoredEntity, ComponentLookup<CreatureAlarm> creatures)
-            {
-                this.ignoredEntity = ignoredEntity;
-                this.creatures = creatures;
-                Hit = default;
-                MaxFraction = 1f;
-                NumHits = 0;
-            }
-
-            public bool EarlyOutOnFirstHit => false;
-            public float MaxFraction { get; private set; }
-            public int NumHits { get; private set; }
-            public Unity.Physics.RaycastHit Hit { get; private set; }
-
-            public bool AddHit(Unity.Physics.RaycastHit hit)
-            {
-                // Other creatures are not ground. Treating them as ground lets two overlapping creatures lift each
-                // other over and over, a few metres every frame, until both are far above the water.
-                if (hit.Entity == ignoredEntity || hit.SurfaceNormal.y < .35f || creatures.HasComponent(hit.Entity))
-                    return false;
-
-                Hit = hit;
-                MaxFraction = hit.Fraction;
-                NumHits = 1;
-                return true;
-            }
         }
     }
 }

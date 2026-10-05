@@ -11,10 +11,13 @@ namespace WorldBuilder.Entities.Resources.Systems
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
+            float rate = SystemAPI.TryGetSingleton<ResourceRegenerationRate>(out var globalRate)
+                ? Unity.Mathematics.math.max(0f, globalRate.Value) : 1f;
+            if (rate <= 0f) return;
             EntityCommandBuffer commands = new EntityCommandBuffer(Allocator.TempJob);
             state.Dependency = new RespawnJob
             {
-                DeltaTime = SystemAPI.Time.DeltaTime,
+                DeltaTime = SystemAPI.Time.DeltaTime * rate,
                 Commands = commands.AsParallelWriter()
             }.ScheduleParallel(state.Dependency);
             state.Dependency.Complete();

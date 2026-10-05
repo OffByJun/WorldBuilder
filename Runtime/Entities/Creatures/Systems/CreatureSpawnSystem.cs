@@ -1,6 +1,7 @@
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Physics;
 using Unity.Transforms;
 using WorldBuilder.Entities.Systems;
 
@@ -17,6 +18,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
             state.RequireForUpdate<WorldEntityPrefabElement>();
             state.RequireForUpdate<CreatureSpawnRequest>();
             state.RequireForUpdate<CreatureGradeDefinition>();
+            state.RequireForUpdate<PhysicsWorldSingleton>();
         }
 
         public void OnUpdate(ref SystemState state)
@@ -25,6 +27,16 @@ namespace WorldBuilder.Entities.Creatures.Systems
             DynamicBuffer<CreatureSpawnRequest> requests =
                 state.EntityManager.GetBuffer<CreatureSpawnRequest>(runtime);
             if (requests.IsEmpty) return;
+            state.CompleteDependency();
+            CollisionWorld collisionWorld = SystemAPI.GetSingleton<PhysicsWorldSingleton>().CollisionWorld;
+            // The first physics build may precede streamed terrain. Keep requests until it is ready.
+            bool hasTerrain = false;
+            var creatures = SystemAPI.GetComponentLookup<CreatureAlarm>(true);
+            foreach (var body in collisionWorld.Bodies)
+                if (body.Collider.IsCreated && !creatures.HasComponent(body.Entity)) { hasTerrain = true; break; }
+            if (!hasTerrain) return;
+            float waterSurface = SystemAPI.TryGetSingleton(out CreatureWaterSurface water)
+                ? water.Height : float.PositiveInfinity;
 
             DynamicBuffer<WorldEntityPrefabElement> prefabs =
                 state.EntityManager.GetBuffer<WorldEntityPrefabElement>(runtime, true);
@@ -50,6 +62,29 @@ namespace WorldBuilder.Entities.Creatures.Systems
                         : CreatureGradeRules.SelectGrade(definitions, CreatureGradeMask.All, ref random);
                 CreatureGradeDefinition definition = CreatureGradeRules.Resolve(definitions, grade);
 
+                float baseScale = state.EntityManager.GetComponentData<LocalTransform>(prefab).Scale;
+                float scale = math.max(.001f, baseScale * definition.SizeMultiplier);
+                float bodyRadius = state.EntityManager.HasComponent<CreatureSwim>(prefab)
+                    ? state.EntityManager.GetComponentData<CreatureSwim>(prefab).BodyRadius : .5f;
+                float radius = CreatureTerrainCollision.Radius(scale, bodyRadius);
+                float3 position = request.Position;
+                bool placed = CreatureTerrainCollision.TryPlace(collisionWorld, creatures, Entity.Null,
+                    position, radius, waterSurface, out position);
+                // Zone requests can choose another candidate. Explicit positions never move sideways.
+                if (!placed && request.Owner != Entity.Null &&
+                    state.EntityManager.HasComponent<CreatureSpawnZone>(request.Owner))
+                {
+                    var zone = state.EntityManager.GetComponentData<CreatureSpawnZone>(request.Owner);
+                    var zoneTransform = state.EntityManager.GetComponentData<LocalTransform>(request.Owner);
+                    for (int attempt = 0; attempt < 12 && !placed; attempt++)
+                    {
+                        float3 candidate = zoneTransform.Position + math.rotate(zoneTransform.Rotation,
+                            random.NextFloat3(-zone.HalfExtents, zone.HalfExtents));
+                        placed = CreatureTerrainCollision.TryPlace(collisionWorld, creatures, Entity.Null,
+                            candidate, radius, waterSurface, out position);
+                    }
+                }
+                if (!placed) continue;
                 Entity instance = commands.Instantiate(prefab);
                 WorldEntityIdentity identity = request.Identity;
                 if ((request.StateFlags & CreatureSpawnRequestFlags.ExplicitIdentity) == 0 || !identity.IsValid)
@@ -59,11 +94,10 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 }
                 commands.SetComponent(instance, identity);
 
-                float baseScale = state.EntityManager.GetComponentData<LocalTransform>(prefab).Scale;
-                commands.SetComponent(instance, LocalTransform.FromPositionRotationScale(request.Position,
-                    request.Rotation, math.max(0.001f, baseScale * definition.SizeMultiplier)));
+                commands.SetComponent(instance, LocalTransform.FromPositionRotationScale(position,
+                    request.Rotation, scale));
 
-                int2 chunk = WorldEntityGridUtility.WorldToChunk(request.Position, config.ValueRO);
+                int2 chunk = WorldEntityGridUtility.WorldToChunk(position, config.ValueRO);
                 int2 region = WorldEntityGridUtility.ChunkToRegion(chunk, config.ValueRO.ChunksPerRegion);
                 commands.SetComponent(instance, new WorldEntityChunk { Chunk = chunk, Region = region });
 
@@ -77,9 +111,9 @@ namespace WorldBuilder.Entities.Creatures.Systems
                     CreatureSwim swim = state.EntityManager.GetComponentData<CreatureSwim>(prefab);
                     swim.Home = (request.StateFlags & CreatureSpawnRequestFlags.ExplicitHome) != 0
                         ? request.Home
-                        : request.Position;
+                        : position;
                     swim.HomeRegion = WorldEntityGridUtility.WorldToRegion(swim.Home, config.ValueRO);
-                    swim.TargetPoint = request.Position;
+                    swim.TargetPoint = position;
                     swim.CruiseSpeed *= definition.SpeedMultiplier;
                     swim.NextRepathTime = 0d;
                     commands.SetComponent(instance, swim);

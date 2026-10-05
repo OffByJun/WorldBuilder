@@ -1,3 +1,4 @@
+using System;
 using Unity.Entities;
 using UnityEngine;
 
@@ -8,6 +9,7 @@ namespace WorldBuilder.Entities.Creatures.Authoring
     {
         [Tooltip("WorldEntity prefab id of the creature prefab.")]
         [SerializeField] private int prefabId;
+        [SerializeField] private WorldBuilder.Entities.Authoring.SpawnZoneEntryAuthoring[] spawnEntries = Array.Empty<WorldBuilder.Entities.Authoring.SpawnZoneEntryAuthoring>();
         [SerializeField] private Vector3 size = new Vector3(30f, 12f, 30f);
         [SerializeField] private CreatureGradeMask allowedGrades = CreatureGradeMask.All;
         [Min(0.01f), SerializeField] private float spawnInterval = 6f;
@@ -17,6 +19,8 @@ namespace WorldBuilder.Entities.Creatures.Authoring
 
         private void OnValidate()
         {
+            foreach (var entry in spawnEntries ?? Array.Empty<WorldBuilder.Entities.Authoring.SpawnZoneEntryAuthoring>())
+                if (entry != null) entry.Weight = float.IsNaN(entry.Weight) ? 0f : Mathf.Clamp01(entry.Weight);
             size = new Vector3(Mathf.Max(0.1f, size.x), Mathf.Max(0.1f, size.y), Mathf.Max(0.1f, size.z));
             spawnInterval = Mathf.Max(0.01f, spawnInterval);
             maximumAlive = Mathf.Max(0, maximumAlive);
@@ -43,6 +47,24 @@ namespace WorldBuilder.Entities.Creatures.Authoring
                     RandomState = CreatureGradeRules.SanitizeSeed(authoring.randomSeed)
                 });
                 AddBuffer<CreatureSpawnedEntity>(entity);
+                var entries = AddBuffer<CreatureZoneSpawnEntry>(entity);
+                foreach (var entry in authoring.spawnEntries ?? Array.Empty<WorldBuilder.Entities.Authoring.SpawnZoneEntryAuthoring>())
+                {
+                    if (entry == null) continue;
+                    int id = authoring.prefabId;
+                    if (entry.Prefab)
+                    {
+                        DependsOn(entry.Prefab);
+                        var identity = entry.Prefab.GetComponent<WorldBuilder.Entities.Authoring.WorldEntityAuthoring>();
+                        if (!identity) continue;
+                        DependsOn(identity);
+                        id = identity.PrefabId;
+                    }
+                    entries.Add(new CreatureZoneSpawnEntry { PrefabId = id,
+                        Weight = float.IsNaN(entry.Weight) || float.IsInfinity(entry.Weight) ? 0f : Mathf.Clamp01(entry.Weight) });
+                }
+                if (authoring.spawnEntries != null && authoring.spawnEntries.Length > 0 && entries.Length == 0)
+                    entries.Add(default);
             }
         }
 

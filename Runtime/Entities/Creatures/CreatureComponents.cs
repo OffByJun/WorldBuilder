@@ -84,6 +84,8 @@ namespace WorldBuilder.Entities.Creatures
 
     public struct CreatureSwim : IComponentData
     {
+        // Unscaled radius enclosing the visible model, including child offsets and wings.
+        public float BodyRadius;
         public float3 Home;
         public float3 TargetPoint;
         public int2 HomeRegion;
@@ -203,6 +205,13 @@ namespace WorldBuilder.Entities.Creatures
         public int MaximumAlive;
         public int SpawnPerTick;
         public uint RandomState;
+    }
+
+    [InternalBufferCapacity(4)]
+    public struct CreatureZoneSpawnEntry : IBufferElementData
+    {
+        public int PrefabId;
+        public float Weight;
     }
 
     [InternalBufferCapacity(16)]

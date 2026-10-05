@@ -25,6 +25,12 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 state.EntityManager.GetBuffer<CreatureGradeDefinition>(runtime, true);
             DynamicBuffer<CreatureSpawnRequest> requests =
                 state.EntityManager.GetBuffer<CreatureSpawnRequest>(runtime);
+            var prefabs = new NativeParallelHashSet<int>(16, Allocator.Temp);
+            if (state.EntityManager.HasBuffer<WorldEntityPrefabElement>(runtime))
+            {
+                foreach (var entry in state.EntityManager.GetBuffer<WorldEntityPrefabElement>(runtime, true))
+                    if (state.EntityManager.HasComponent<Creature>(entry.Prefab)) prefabs.Add(entry.PrefabId);
+            }
 
             NativeParallelHashSet<int2> loaded = BuildLoadedRegions(state.EntityManager, runtime);
 
@@ -44,10 +50,11 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 int count = math.min(value.SpawnPerTick, value.MaximumAlive - spawned.Length);
                 for (int i = 0; i < count; i++)
                 {
-                    float3 position = center + random.NextFloat3(-value.HalfExtents, value.HalfExtents);
+                    if (!TrySelectPrefab(state.EntityManager, zoneEntity, value.PrefabId, prefabs, ref random, out int prefabId)) continue;
+                    float3 position = center + math.rotate(transform.ValueRO.Rotation, random.NextFloat3(-value.HalfExtents, value.HalfExtents));
                     requests.Add(new CreatureSpawnRequest
                     {
-                        PrefabId = value.PrefabId,
+                        PrefabId = prefabId,
                         Owner = zoneEntity,
                         Position = position,
                         Rotation = quaternion.RotateY(random.NextFloat(0f, 2f * math.PI)),
@@ -63,6 +70,29 @@ namespace WorldBuilder.Entities.Creatures.Systems
             }
 
             if (loaded.IsCreated) loaded.Dispose();
+            prefabs.Dispose();
+        }
+
+        private static bool TrySelectPrefab(EntityManager manager, Entity zone, int legacyId,
+            NativeParallelHashSet<int> prefabs, ref Random random, out int prefabId)
+        {
+            prefabId = legacyId;
+            if (!manager.HasBuffer<CreatureZoneSpawnEntry>(zone)) return legacyId > 0;
+            var entries = manager.GetBuffer<CreatureZoneSpawnEntry>(zone, true);
+            if (entries.Length == 0) return legacyId > 0;
+            float total = 0f;
+            foreach (var entry in entries)
+                if (entry.Weight > 0f && math.isfinite(entry.Weight) && prefabs.Contains(entry.PrefabId)) total += math.saturate(entry.Weight);
+            if (!(total > 0f) || !math.isfinite(total)) return false;
+            float roll = random.NextFloat() * total;
+            foreach (var entry in entries)
+            {
+                if (!(entry.Weight > 0f) || !math.isfinite(entry.Weight) || !prefabs.Contains(entry.PrefabId)) continue;
+                prefabId = entry.PrefabId;
+                roll -= math.saturate(entry.Weight);
+                if (roll < 0f) return true;
+            }
+            return true;
         }
 
         private static NativeParallelHashSet<int2> BuildLoadedRegions(EntityManager entityManager, Entity runtime)

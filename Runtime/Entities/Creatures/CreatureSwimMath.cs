@@ -35,15 +35,24 @@ namespace WorldBuilder.Entities.Creatures
             => math.distancesq(position, target) <= arriveRadius * arriveRadius;
 
         public static bool ShouldRepath(in CreatureSwim swim, float3 position, double elapsedTime)
-            => elapsedTime >= swim.NextRepathTime || HasArrived(position, swim.TargetPoint, swim.ArriveRadius);
+            // The interval controls how soon another destination may be chosen, not how long a trip may last.
+            => swim.NextRepathTime <= 0d ||
+               (elapsedTime >= swim.NextRepathTime && HasArrived(position, swim.TargetPoint, math.max(0f, swim.ArriveRadius)));
 
         public static CreatureSwimStep Advance(float3 position, quaternion rotation, float3 target,
             float cruiseSpeed, float turnSpeedRadians, float deltaTime)
         {
-            float3 heading = math.normalizesafe(target - position, math.forward(rotation));
+            float3 offset = target - position;
+            float distance = math.length(offset);
+            if (distance <= math.EPSILON || deltaTime <= 0f)
+                return new CreatureSwimStep(position, rotation);
+            float3 heading = offset / distance;
             quaternion desired = quaternion.LookRotationSafe(heading, math.up());
             quaternion next = RotateTowards(rotation, desired, math.max(0f, turnSpeedRadians) * deltaTime);
-            return new CreatureSwimStep(position + math.forward(next) * math.max(0f, cruiseSpeed) * deltaTime, next);
+            // Navigation follows the destination; the visible body turns independently. Advancing along the
+            // partly turned forward vector made nearby/behind targets produce circles and repeated overshoots.
+            float stepDistance = math.min(distance, math.max(0f, cruiseSpeed) * deltaTime);
+            return new CreatureSwimStep(position + heading * stepDistance, next);
         }
 
         public static quaternion RotateTowards(quaternion from, quaternion to, float maxRadians)

@@ -58,6 +58,12 @@ namespace WorldBuilder.Entities.Resources
         public float RemainingSeconds;
     }
 
+    /// <summary>Optional world-wide regeneration rate; absent means the designed rate of 1.</summary>
+    public struct ResourceRegenerationRate : IComponentData
+    {
+        public float Value;
+    }
+
     public struct DroppedItem : IComponentData
     {
         public int ItemId;
@@ -69,7 +75,9 @@ namespace WorldBuilder.Entities.Resources
 
     public enum ResourceFieldSpawnKind : byte
     {
+        [UnityEngine.InspectorName("채집 자원")]
         ResourceNode,
+        [UnityEngine.InspectorName("떨어진 아이템")]
         DroppedItem
     }
 
@@ -88,6 +96,16 @@ namespace WorldBuilder.Entities.Resources
         public int MaximumAlive;
         public int SpawnPerTick;
         public uint RandomState;
+    }
+
+    [InternalBufferCapacity(4)]
+    public struct ResourceFieldSpawnEntry : IBufferElementData
+    {
+        public int PrefabId;
+        public int ItemId;
+        public float Weight;
+        public int MinimumCount;
+        public int MaximumCount;
     }
 
     [InternalBufferCapacity(12)]

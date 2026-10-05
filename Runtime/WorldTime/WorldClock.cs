@@ -40,6 +40,8 @@ namespace WorldBuilder.Runtime.WorldTime
         /// <summary>0 = full day, 1 = full night, smooth through dawn/dusk.</summary>
         public float Nightness { get; private set; }
 
+        public float DayLengthSeconds { get => dayLengthSeconds; set => dayLengthSeconds = Mathf.Max(1f, value); }
+
         public bool Paused { get; set; }
 
         /// <summary>

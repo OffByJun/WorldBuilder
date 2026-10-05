@@ -1,3 +1,4 @@
+using System;
 using Unity.Entities;
 using UnityEngine;
 
@@ -10,7 +11,9 @@ namespace WorldBuilder.Entities.Resources.Authoring
         [Tooltip("WorldEntity prefab id for a resource node or generic dropped item.")]
         [SerializeField] private int prefabId;
         [Tooltip("Only used by DroppedItem zones.")]
-        [SerializeField] private int itemId;
+        [ItemId, SerializeField] private int itemId;
+        [Tooltip("Relative spawn weights. An empty list uses the original single-spawn settings.")]
+        [SerializeField] private WorldBuilder.Entities.Authoring.SpawnZoneEntryAuthoring[] spawnEntries = Array.Empty<WorldBuilder.Entities.Authoring.SpawnZoneEntryAuthoring>();
         [Min(1), SerializeField] private int minimumItemCount = 1;
         [Min(1), SerializeField] private int maximumItemCount = 1;
         [SerializeField] private Vector3 size = new Vector3(20f, 10f, 20f);
@@ -34,6 +37,8 @@ namespace WorldBuilder.Entities.Resources.Authoring
 
         private void OnValidate()
         {
+            foreach (var entry in spawnEntries ?? Array.Empty<WorldBuilder.Entities.Authoring.SpawnZoneEntryAuthoring>())
+                if (entry != null) entry.Weight = float.IsNaN(entry.Weight) ? 0f : Mathf.Clamp01(entry.Weight);
             size = new Vector3(Mathf.Max(0.1f, size.x), Mathf.Max(0.1f, size.y), Mathf.Max(0.1f, size.z));
             raycastHeight = Mathf.Max(0.1f, raycastHeight);
             minimumGroundNormalY = Mathf.Clamp01(minimumGroundNormalY);
@@ -66,6 +71,31 @@ namespace WorldBuilder.Entities.Resources.Authoring
                     RandomState = authoring.randomSeed == 0 ? 1u : authoring.randomSeed
                 });
                 AddBuffer<ResourceFieldSpawnedEntity>(entity);
+                DynamicBuffer<ResourceFieldSpawnEntry> entries = AddBuffer<ResourceFieldSpawnEntry>(entity);
+                foreach (var entry in authoring.spawnEntries ?? Array.Empty<WorldBuilder.Entities.Authoring.SpawnZoneEntryAuthoring>())
+                {
+                    if (entry == null) continue;
+                    int id = authoring.prefabId;
+                    if (entry.Prefab != null)
+                    {
+                        DependsOn(entry.Prefab);
+                        var identity = entry.Prefab.GetComponent<WorldBuilder.Entities.Authoring.WorldEntityAuthoring>();
+                        if (identity == null) continue;
+                        DependsOn(identity);
+                        id = identity.PrefabId;
+                    }
+                    entries.Add(new ResourceFieldSpawnEntry
+                    {
+                        PrefabId = id,
+                        ItemId = entry.ItemId,
+                        Weight = float.IsNaN(entry.Weight) || float.IsInfinity(entry.Weight) ? 0f : Mathf.Clamp01(entry.Weight),
+                        MinimumCount = Mathf.Max(1, entry.MinimumCount),
+                        MaximumCount = Mathf.Max(1, Mathf.Max(entry.MinimumCount, entry.MaximumCount))
+                    });
+                }
+                // An explicitly configured but invalid list must not fall back to an unintended legacy spawn.
+                if (authoring.spawnEntries != null && authoring.spawnEntries.Length > 0 && entries.Length == 0)
+                    entries.Add(default);
                 DynamicBuffer<ResourceFieldSpawnPoint> points = AddBuffer<ResourceFieldSpawnPoint>(entity);
                 if (authoring.polygon == null) return;
                 foreach (Vector2 point in authoring.polygon)

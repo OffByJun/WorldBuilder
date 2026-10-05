@@ -114,8 +114,16 @@ namespace WorldBuilder.Entities.Creatures.Authoring
                     State = CreatureGradeRules.SanitizeSeed(authoring.randomSeed)
                 });
 
+                Renderer[] bodyRenderers = GetComponentsInChildren<Renderer>();
+                foreach (Renderer renderer in bodyRenderers)
+                {
+                    DependsOn(renderer.transform);
+                    if (renderer is SkinnedMeshRenderer skinned) DependsOn(skinned.sharedMesh);
+                }
+                foreach (MeshFilter filter in GetComponentsInChildren<MeshFilter>()) DependsOn(filter.sharedMesh);
                 AddComponent(entity, new CreatureSwim
                 {
+                    BodyRadius = CreatureBodyBounds.CalculateRadius(authoring.transform, bodyRenderers),
                     CruiseSpeed = authoring.cruiseSpeed,
                     TurnSpeedRadians = math.radians(authoring.turnSpeedDegrees),
                     WanderRadius = authoring.wanderRadius,

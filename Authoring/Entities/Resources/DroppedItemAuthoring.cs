@@ -8,7 +8,7 @@ namespace WorldBuilder.Entities.Resources.Authoring
     [AddComponentMenu("WorldBuilder/Entities/Dropped Item")]
     public sealed class DroppedItemAuthoring : MonoBehaviour
     {
-        [SerializeField] private int itemId;
+        [ItemId, SerializeField] private int itemId;
         [Min(1), SerializeField] private int count = 1;
         [SerializeField] private string displayName = "Item";
 

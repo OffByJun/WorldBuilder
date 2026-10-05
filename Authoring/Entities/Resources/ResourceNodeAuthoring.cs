@@ -8,7 +8,7 @@ namespace WorldBuilder.Entities.Resources.Authoring
     [Serializable]
     public struct ResourceDropAuthoring
     {
-        public int ItemId;
+        [ItemId] public int ItemId;
         [Min(0)] public int MinimumCount;
         [Min(0)] public int MaximumCount;
         [Range(0f, 1f)] public float Probability;
@@ -24,7 +24,7 @@ namespace WorldBuilder.Entities.Resources.Authoring
         [Min(0f), SerializeField] private float respawnSeconds;
         [SerializeField] private HarvestMethod allowedMethods = HarvestMethod.Hand;
         [Tooltip("-1 allows any tool matching the method/tier/power requirements.")]
-        [SerializeField] private int requiredToolItemId = -1;
+        [ItemId, SerializeField] private int requiredToolItemId = -1;
         [Min(0), SerializeField] private int minimumToolTier;
         [Min(0f), SerializeField] private float minimumToolPower;
         [Tooltip("WorldEntity prefab id of the generic dropped-item prefab.")]

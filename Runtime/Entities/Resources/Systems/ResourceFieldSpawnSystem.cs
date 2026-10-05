@@ -46,30 +46,37 @@ namespace WorldBuilder.Entities.Resources.Systems
                          .WithEntityAccess())
             {
                 PruneDestroyed(state.EntityManager, spawned);
-                if (zone.ValueRO.MaximumAlive <= spawned.Length || elapsed < zone.ValueRO.NextSpawnTime ||
-                    !prefabMap.TryGetValue(zone.ValueRO.PrefabId, out Entity prefab)) continue;
+                if (zone.ValueRO.MaximumAlive <= spawned.Length || elapsed < zone.ValueRO.NextSpawnTime) continue;
 
                 ResourceFieldSpawnZone value = zone.ValueRO;
+                bool hasEntries = state.EntityManager.HasBuffer<ResourceFieldSpawnEntry>(zoneEntity);
+                DynamicBuffer<ResourceFieldSpawnEntry> entries = hasEntries
+                    ? state.EntityManager.GetBuffer<ResourceFieldSpawnEntry>(zoneEntity, true) : default;
                 Random random = Random.CreateFromIndex(value.RandomState == 0 ? 1u : value.RandomState);
                 int count = math.min(value.SpawnPerTick, value.MaximumAlive - spawned.Length);
                 for (int i = 0; i < count; i++)
                 {
+                    if (!TrySelectEntry(ref random, value, hasEntries, entries, prefabMap,
+                            state.EntityManager, out ResourceFieldSpawnEntry selected, out Entity prefab)) continue;
                     if (!TryGetPointInZone(ref random, points, out float2 normalizedPoint)) continue;
 
                     float3 localOffset = new float3(normalizedPoint.x * value.HalfExtents.x, 0f,
                         normalizedPoint.y * value.HalfExtents.z);
                     float3 offset = math.rotate(transform.ValueRO.Rotation, localOffset);
                     float3 center = transform.ValueRO.Position;
+                    float verticalReach = value.RaycastHeight + value.HalfExtents.y;
                     RaycastInput input = new RaycastInput
                     {
-                        Start = center + offset + new float3(0f, value.RaycastHeight, 0f),
-                        End = center + offset - new float3(0f, value.RaycastHeight, 0f),
+                        Start = center + offset + new float3(0f, verticalReach, 0f),
+                        End = center + offset - new float3(0f, verticalReach, 0f),
                         Filter = CollisionFilter.Default
                     };
                     hits.Clear();
                     if (!physics.CollisionWorld.CastRay(input, ref hits) ||
                         !TryGetTerrainHit(state.EntityManager, hits, value.MinimumGroundNormalY,
                             out Unity.Physics.RaycastHit hit)) continue;
+                    float3 groundPosition = hit.Position;
+                    float3 groundNormal = hit.SurfaceNormal;
 
                     Entity instance = commands.Instantiate(prefab);
                     config.ValueRW.NextRuntimeId++;
@@ -79,8 +86,13 @@ namespace WorldBuilder.Entities.Resources.Systems
                         Low = config.ValueRO.NextRuntimeId
                     });
                     commands.SetComponent(instance,
-                        LocalTransform.FromPositionRotationScale(hit.Position, quaternion.identity, 1f));
-                    int2 chunk = WorldEntityGridUtility.WorldToChunk(hit.Position, config.ValueRO);
+                        LocalTransform.FromPositionRotationScale(groundPosition + groundNormal * 0.03f,
+                            value.Kind == ResourceFieldSpawnKind.DroppedItem
+                                ? SurfaceRotation(groundNormal)
+                                : quaternion.identity,
+                            state.EntityManager.HasComponent<LocalTransform>(prefab)
+                                ? state.EntityManager.GetComponentData<LocalTransform>(prefab).Scale : 1f));
+                    int2 chunk = WorldEntityGridUtility.WorldToChunk(groundPosition, config.ValueRO);
                     commands.SetComponent(instance, new WorldEntityChunk
                     {
                         Chunk = chunk,
@@ -89,11 +101,11 @@ namespace WorldBuilder.Entities.Resources.Systems
                     commands.SetComponentEnabled<WorldEntityActive>(instance, true);
                     if (value.Kind == ResourceFieldSpawnKind.DroppedItem)
                     {
-                        int itemCount = random.NextInt(value.MinimumItemCount, value.MaximumItemCount + 1);
+                        int itemCount = random.NextInt(selected.MinimumCount, selected.MaximumCount + 1);
                         DroppedItem droppedItem = state.EntityManager.HasComponent<DroppedItem>(prefab)
                             ? state.EntityManager.GetComponentData<DroppedItem>(prefab)
                             : default;
-                        droppedItem.ItemId = value.ItemId;
+                        droppedItem.ItemId = selected.ItemId;
                         droppedItem.Count = itemCount;
                         commands.SetComponent(instance, droppedItem);
                         commands.SetComponentEnabled<DroppedItemPendingPickup>(instance, false);
@@ -111,6 +123,49 @@ namespace WorldBuilder.Entities.Resources.Systems
             commands.Dispose();
             hits.Dispose();
             prefabMap.Dispose();
+        }
+
+        private static bool TrySelectEntry(ref Random random, ResourceFieldSpawnZone zone, bool hasEntries,
+            DynamicBuffer<ResourceFieldSpawnEntry> entries, NativeParallelHashMap<int, Entity> prefabs,
+            EntityManager manager, out ResourceFieldSpawnEntry selected, out Entity prefab)
+        {
+            selected = default;
+            prefab = Entity.Null;
+            if (!hasEntries || entries.Length == 0)
+            {
+                selected = new ResourceFieldSpawnEntry { PrefabId = zone.PrefabId, ItemId = zone.ItemId,
+                    MinimumCount = math.max(1, zone.MinimumItemCount),
+                    MaximumCount = math.max(1, math.max(zone.MinimumItemCount, zone.MaximumItemCount)), Weight = 1f };
+                return IsValidEntry(selected, zone.Kind, prefabs, manager, out prefab);
+            }
+
+            float total = 0f;
+            for (int i = 0; i < entries.Length; i++)
+                if (IsValidEntry(entries[i], zone.Kind, prefabs, manager, out _)) total += math.saturate(entries[i].Weight);
+            if (!(total > 0f) || !math.isfinite(total)) return false;
+            float roll = random.NextFloat() * total;
+            for (int i = 0; i < entries.Length; i++)
+            {
+                ResourceFieldSpawnEntry candidate = entries[i];
+                if (!IsValidEntry(candidate, zone.Kind, prefabs, manager, out Entity candidatePrefab)) continue;
+                selected = candidate;
+                prefab = candidatePrefab;
+                roll -= math.saturate(candidate.Weight);
+                if (roll < 0f) return true;
+            }
+            return prefab != Entity.Null;
+        }
+
+        private static bool IsValidEntry(ResourceFieldSpawnEntry entry, ResourceFieldSpawnKind kind,
+            NativeParallelHashMap<int, Entity> prefabs, EntityManager manager, out Entity prefab)
+        {
+            prefab = Entity.Null;
+            if (!(entry.Weight > 0f) || !math.isfinite(entry.Weight) ||
+                !prefabs.TryGetValue(entry.PrefabId, out prefab)) return false;
+            return kind == ResourceFieldSpawnKind.ResourceNode
+                ? manager.HasComponent<ResourceNode>(prefab)
+                : entry.ItemId >= 0 && manager.HasComponent<DroppedItem>(prefab)
+                    && manager.HasComponent<DroppedItemPendingPickup>(prefab);
         }
 
         private static bool TryGetPointInZone(ref Random random, DynamicBuffer<ResourceFieldSpawnPoint> points,
@@ -154,7 +209,7 @@ namespace WorldBuilder.Entities.Resources.Systems
             for (int i = 0; i < hits.Length; i++)
             {
                 Unity.Physics.RaycastHit hit = hits[i];
-                if (hit.Fraction >= nearestFraction || hit.SurfaceNormal.y < minimumGroundNormalY ||
+                if (hit.Fraction >= nearestFraction ||
                     !entityManager.HasComponent<ResourceSpawnTerrain>(hit.Entity)) continue;
 
                 terrainHit = hit;
@@ -162,7 +217,17 @@ namespace WorldBuilder.Entities.Resources.Systems
                 found = true;
             }
 
-            return found;
+            // Reject a steep upper surface rather than spawning on a hidden layer below it.
+            return found && terrainHit.SurfaceNormal.y >= minimumGroundNormalY;
+        }
+
+        private static quaternion SurfaceRotation(float3 normal)
+        {
+            normal = math.normalizesafe(normal, new float3(0f, 1f, 0f));
+            // Choose a tangent that remains stable even on near-vertical slopes.
+            float3 axis = math.abs(normal.z) < .9f ? new float3(0f, 0f, 1f) : new float3(1f, 0f, 0f);
+            float3 forward = math.normalizesafe(axis - normal * math.dot(axis, normal));
+            return quaternion.LookRotationSafe(forward, normal);
         }
 
         private static void PruneDestroyed(EntityManager entityManager,
