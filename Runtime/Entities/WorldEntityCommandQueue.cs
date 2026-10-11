@@ -42,6 +42,7 @@ namespace WorldBuilder.Entities
                 Velocity = snapshot.Velocity,
                 RemainingLifetime = snapshot.RemainingLifetime,
                 ResourceHealth = snapshot.ResourceHealth,
+                ResourcePieceHealth = snapshot.ResourcePieceHealth,
                 ResourceRespawnRemaining = snapshot.ResourceRespawnRemaining,
                 DroppedItemId = snapshot.DroppedItemId,
                 DroppedItemCount = snapshot.DroppedItemCount,
@@ -66,21 +67,6 @@ namespace WorldBuilder.Entities
         }
 
         private static bool TryGetRuntime(out EntityManager entityManager, out Entity runtime)
-        {
-            World world = World.DefaultGameObjectInjectionWorld;
-            if (world == null || !world.IsCreated)
-            {
-                entityManager = default;
-                runtime = Entity.Null;
-                return false;
-            }
-
-            entityManager = world.EntityManager;
-            EntityQuery query = entityManager.CreateEntityQuery(ComponentType.ReadOnly<WorldEntityRuntimeConfig>());
-            bool found = query.CalculateEntityCount() == 1;
-            runtime = found ? query.GetSingletonEntity() : Entity.Null;
-            query.Dispose();
-            return found;
-        }
+            => WorldRuntimeLookup.TryGetRuntime(out entityManager, out runtime);
     }
 }
