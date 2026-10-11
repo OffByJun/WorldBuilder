@@ -21,6 +21,7 @@ namespace WorldBuilder.Entities.Systems
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
+            if (!WorldBuilder.Entities.WorldSimulationAuthority.Enabled) return;
             Entity runtime = SystemAPI.GetSingletonEntity<WorldEntityRuntimeConfig>();
             DynamicBuffer<WorldEntitySpawnRequest> requests =
                 state.EntityManager.GetBuffer<WorldEntitySpawnRequest>(runtime);

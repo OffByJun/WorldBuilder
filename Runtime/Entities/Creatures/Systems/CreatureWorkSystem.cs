@@ -15,6 +15,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
 
         public void OnUpdate(ref SystemState state)
         {
+            if (!WorldBuilder.Entities.WorldSimulationAuthority.Enabled) return;
             double elapsed = SystemAPI.Time.ElapsedTime;
             foreach (var (plot, site, ready) in
                      SystemAPI.Query<RefRW<CropPlot>, RefRW<CreatureWorkSite>,
@@ -47,6 +48,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
 
         public void OnUpdate(ref SystemState state)
         {
+            if (!WorldBuilder.Entities.WorldSimulationAuthority.Enabled) return;
             double elapsed = SystemAPI.Time.ElapsedTime;
             foreach (var (refresh, site, ready) in
                      SystemAPI.Query<RefRW<CreatureWorkSiteRefresh>, RefRW<CreatureWorkSite>,
@@ -82,6 +84,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
 
         public void OnUpdate(ref SystemState state)
         {
+            if (!WorldBuilder.Entities.WorldSimulationAuthority.Enabled) return;
             EntityManager entityManager = state.EntityManager;
             NativeList<Entity> openSites = new NativeList<Entity>(Allocator.Temp);
 
@@ -148,6 +151,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
 
         public void OnUpdate(ref SystemState state)
         {
+            if (!WorldBuilder.Entities.WorldSimulationAuthority.Enabled) return;
             EntityManager entityManager = state.EntityManager;
             double elapsed = SystemAPI.Time.ElapsedTime;
             transformLookup.Update(ref state);

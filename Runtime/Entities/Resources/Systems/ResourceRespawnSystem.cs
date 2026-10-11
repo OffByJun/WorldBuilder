@@ -20,6 +20,7 @@ namespace WorldBuilder.Entities.Resources.Systems
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
+            if (!WorldBuilder.Entities.WorldSimulationAuthority.Enabled) return;
             float rate = SystemAPI.TryGetSingleton<ResourceRegenerationRate>(out var globalRate)
                 ? Unity.Mathematics.math.max(0f, globalRate.Value) : 1f;
             if (rate <= 0f) return;

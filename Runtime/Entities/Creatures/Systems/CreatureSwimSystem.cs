@@ -23,6 +23,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
+            if (!WorldBuilder.Entities.WorldSimulationAuthority.Enabled) return;
             float surface = SystemAPI.TryGetSingleton(out CreatureWaterSurface water)
                 ? water.Height
                 : float.PositiveInfinity;

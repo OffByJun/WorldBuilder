@@ -14,6 +14,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
 
         public void OnUpdate(ref SystemState state)
         {
+            if (!WorldBuilder.Entities.WorldSimulationAuthority.Enabled) return;
             Entity runtime = SystemAPI.GetSingletonEntity<CreatureFeedRequest>();
             DynamicBuffer<CreatureFeedRequest> requests = state.EntityManager.GetBuffer<CreatureFeedRequest>(runtime);
             if (requests.IsEmpty) return;

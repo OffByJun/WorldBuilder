@@ -23,6 +23,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
 
         public void OnUpdate(ref SystemState state)
         {
+            if (!WorldBuilder.Entities.WorldSimulationAuthority.Enabled) return;
             Entity runtime = SystemAPI.GetSingletonEntity<WorldEntityRuntimeConfig>();
             DynamicBuffer<CreatureSpawnRequest> requests =
                 state.EntityManager.GetBuffer<CreatureSpawnRequest>(runtime);

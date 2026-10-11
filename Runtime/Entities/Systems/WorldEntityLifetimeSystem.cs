@@ -11,6 +11,7 @@ namespace WorldBuilder.Entities.Systems
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
+            if (!WorldBuilder.Entities.WorldSimulationAuthority.Enabled) return;
             EntityCommandBuffer commands = new EntityCommandBuffer(Allocator.TempJob);
             state.Dependency = new TickLifetimeJob
             {

@@ -18,6 +18,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
 
         public void OnUpdate(ref SystemState state)
         {
+            if (!WorldBuilder.Entities.WorldSimulationAuthority.Enabled) return;
             double elapsed = SystemAPI.Time.ElapsedTime;
             Entity runtime = SystemAPI.GetSingletonEntity<WorldEntityRuntimeConfig>();
             WorldEntityRuntimeConfig config = SystemAPI.GetSingleton<WorldEntityRuntimeConfig>();

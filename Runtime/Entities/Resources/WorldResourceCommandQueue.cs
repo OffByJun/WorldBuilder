@@ -21,6 +21,7 @@ namespace WorldBuilder.Entities.Resources
         }
 
         private static uint nextRequestId;
+        public static Func<InventoryGrantRequest, int?> RemoteInventoryGrant;
 
         public static bool TryGetInteractionInfo(Entity target, out ResourceInteractionInfo info)
         {
@@ -113,7 +114,7 @@ namespace WorldBuilder.Entities.Resources
             for (int i = 0; i < pending.Length; i++)
             {
                 InventoryGrantRequest request = pending[i];
-                int accepted = math.clamp(acceptItems(request.ItemId, request.RequestedCount), 0,
+                int accepted = math.clamp(RemoteInventoryGrant?.Invoke(request) ?? acceptItems(request.ItemId, request.RequestedCount), 0,
                     request.RequestedCount);
                 if (request.IsHarvest != 0)
                 {

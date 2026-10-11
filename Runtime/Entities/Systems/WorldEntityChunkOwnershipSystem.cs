@@ -18,6 +18,7 @@ namespace WorldBuilder.Entities.Systems
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
+            if (!WorldBuilder.Entities.WorldSimulationAuthority.Enabled) return;
             WorldEntityRuntimeConfig config = SystemAPI.GetSingleton<WorldEntityRuntimeConfig>();
             state.Dependency = new UpdateOwnershipJob { Config = config }.ScheduleParallel(state.Dependency);
         }

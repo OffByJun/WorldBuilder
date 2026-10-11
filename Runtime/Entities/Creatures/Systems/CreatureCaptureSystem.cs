@@ -18,6 +18,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
 
         public void OnUpdate(ref SystemState state)
         {
+            if (!WorldBuilder.Entities.WorldSimulationAuthority.Enabled) return;
             Entity runtime = SystemAPI.GetSingletonEntity<CreatureCaptureRequest>();
             DynamicBuffer<CreatureCaptureRequest> requests =
                 state.EntityManager.GetBuffer<CreatureCaptureRequest>(runtime);
@@ -103,6 +104,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
 
         public void OnUpdate(ref SystemState state)
         {
+            if (!WorldBuilder.Entities.WorldSimulationAuthority.Enabled) return;
             Entity runtime = SystemAPI.GetSingletonEntity<InventoryGrantResult>();
             DynamicBuffer<InventoryGrantResult> results =
                 state.EntityManager.GetBuffer<InventoryGrantResult>(runtime);

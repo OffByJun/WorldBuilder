@@ -20,6 +20,7 @@ namespace WorldBuilder.Entities.Systems
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
+            if (!WorldBuilder.Entities.WorldSimulationAuthority.Enabled) return;
             Entity runtime = SystemAPI.GetSingletonEntity<WorldEntityRuntimeConfig>();
             DynamicBuffer<WorldEntityLoadedRegion> regions =
                 state.EntityManager.GetBuffer<WorldEntityLoadedRegion>(runtime, true);

@@ -26,6 +26,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
+            if (!WorldBuilder.Entities.WorldSimulationAuthority.Enabled) return;
             CreaturePlayerFocus focus = SystemAPI.GetSingleton<CreaturePlayerFocus>();
             state.Dependency = new PerceiveJob
             {

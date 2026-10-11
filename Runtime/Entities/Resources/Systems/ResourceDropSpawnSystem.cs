@@ -18,6 +18,7 @@ namespace WorldBuilder.Entities.Resources.Systems
 
         public void OnUpdate(ref SystemState state)
         {
+            if (!WorldBuilder.Entities.WorldSimulationAuthority.Enabled) return;
             Entity runtime = SystemAPI.GetSingletonEntity<WorldEntityRuntimeConfig>();
             DynamicBuffer<ResourceDropSpawnRequest> requests =
                 state.EntityManager.GetBuffer<ResourceDropSpawnRequest>(runtime);

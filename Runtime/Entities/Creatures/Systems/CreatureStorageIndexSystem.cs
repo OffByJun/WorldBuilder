@@ -21,6 +21,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
 
         public void OnUpdate(ref SystemState state)
         {
+            if (!WorldBuilder.Entities.WorldSimulationAuthority.Enabled) return;
             Entity runtime = SystemAPI.GetSingletonEntity<CreatureStorageIndex>();
             uint version = (uint)state.EntityManager.GetComponentOrderVersion<CreatureStorage>();
             CreatureStorageIndex index = state.EntityManager.GetComponentData<CreatureStorageIndex>(runtime);

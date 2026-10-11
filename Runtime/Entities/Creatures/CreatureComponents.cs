@@ -146,6 +146,7 @@ namespace WorldBuilder.Entities.Creatures
 
     public struct CreatureCaptured : IComponentData, IEnableableComponent { }
 
+    [System.Serializable]
     public struct CreatureAffinity : IComponentData
     {
         public float Value;
@@ -156,6 +157,7 @@ namespace WorldBuilder.Entities.Creatures
         public int PreferredItemId;
     }
 
+    [System.Serializable]
     public struct CreatureTaming : IComponentData
     {
         public float BaseSuccessChance;
@@ -267,6 +269,7 @@ namespace WorldBuilder.Entities.Creatures
     }
 
     [InternalBufferCapacity(0)]
+    [System.Serializable]
     public struct CreatureFeedResult : IBufferElementData
     {
         public uint RequestId;

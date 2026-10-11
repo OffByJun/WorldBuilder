@@ -19,6 +19,7 @@ namespace WorldBuilder.Entities.Resources.Systems
 
         public void OnUpdate(ref SystemState state)
         {
+            if (!WorldBuilder.Entities.WorldSimulationAuthority.Enabled) return;
             double elapsed = SystemAPI.Time.ElapsedTime;
             bool hasDueZone = false;
             foreach (RefRO<ResourceFieldSpawnZone> zone in SystemAPI.Query<RefRO<ResourceFieldSpawnZone>>())
