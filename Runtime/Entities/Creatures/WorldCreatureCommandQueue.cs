@@ -41,16 +41,7 @@ namespace WorldBuilder.Entities.Creatures
             target = Entity.Null;
             fraction = 1f;
             if (!TryGetRuntime(out EntityManager entityManager, out _)) return false;
-            EntityQuery physicsQuery = entityManager.CreateEntityQuery(ComponentType.ReadOnly<PhysicsWorldSingleton>());
-            if (physicsQuery.CalculateEntityCount() != 1)
-            {
-                physicsQuery.Dispose();
-                return false;
-            }
-
-            entityManager.CompleteDependencyBeforeRO<PhysicsWorldSingleton>();
-            PhysicsWorldSingleton physics = physicsQuery.GetSingleton<PhysicsWorldSingleton>();
-            physicsQuery.Dispose();
+            if (!WorldRuntimeLookup.TryGetPhysics(out PhysicsWorldSingleton physics)) return false;
             RaycastInput input = new RaycastInput
             {
                 Start = origin,
@@ -174,20 +165,6 @@ namespace WorldBuilder.Entities.Creatures
         }
 
         private static bool TryGetRuntime(out EntityManager entityManager, out Entity runtime)
-        {
-            World world = World.DefaultGameObjectInjectionWorld;
-            if (world == null || !world.IsCreated)
-            {
-                entityManager = default;
-                runtime = Entity.Null;
-                return false;
-            }
-            entityManager = world.EntityManager;
-            EntityQuery query = entityManager.CreateEntityQuery(ComponentType.ReadOnly<WorldEntityRuntimeConfig>());
-            bool found = query.CalculateEntityCount() == 1;
-            runtime = found ? query.GetSingletonEntity() : Entity.Null;
-            query.Dispose();
-            return found;
-        }
+            => WorldRuntimeLookup.TryGetRuntime(out entityManager, out runtime);
     }
 }

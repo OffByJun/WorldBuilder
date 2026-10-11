@@ -33,7 +33,8 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 ElapsedTime = SystemAPI.Time.ElapsedTime,
                 Config = SystemAPI.GetSingleton<WorldEntityRuntimeConfig>(),
                 CollisionWorld = SystemAPI.GetSingleton<PhysicsWorldSingleton>().CollisionWorld,
-                Creatures = SystemAPI.GetComponentLookup<CreatureAlarm>(true)
+                Creatures = SystemAPI.GetComponentLookup<CreatureAlarm>(true),
+                Immobilized = SystemAPI.GetComponentLookup<CreatureImmobilized>(true)
             }.ScheduleParallel(state.Dependency);
         }
 
@@ -48,22 +49,34 @@ namespace WorldBuilder.Entities.Creatures.Systems
             [ReadOnly] public CollisionWorld CollisionWorld;
             // Every swimmer carries an alarm, so this tells a creature's body apart from the seabed.
             [ReadOnly] public ComponentLookup<CreatureAlarm> Creatures;
+            [ReadOnly] public ComponentLookup<CreatureImmobilized> Immobilized;
 
             private void Execute(Entity entity, ref LocalTransform transform, ref CreatureSwim swim,
                 ref CreatureRandom seed,
                 in CreatureAlarm alarm, in CreatureMoveOrder order, EnabledRefRO<CreatureMoveOrder> hasOrder,
                 EnabledRefRO<CreatureCaptured> captured, EnabledRefRO<WorldEntityActive> active)
             {
-                if (captured.ValueRO || !active.ValueRO) return;
+                if (captured.ValueRO || !active.ValueRO || Immobilized.HasComponent(entity))
+                {
+                    swim.StuckSeconds = 0f;
+                    return;
+                }
 
                 // Swimmers live under the surface: nothing, not a flee, a follow order or a shove, takes one out of the water.
                 float radius = CreatureTerrainCollision.Radius(transform.Scale, swim.BodyRadius);
                 float ceiling = WaterSurface - radius - .05f;
-                if (!CreatureTerrainCollision.TryPlace(CollisionWorld, Creatures, entity, transform.Position,
+                bool alarmed = CreatureTamingRules.IsAlarmed(alarm, ElapsedTime);
+                float3 originalTarget = alarmed
+                    ? CreatureSwimMath.ConstrainToHomeRegion(CreatureTamingRules.FleeTarget(transform.Position, alarm), swim, Config)
+                    : hasOrder.ValueRO ? order.Target : swim.TargetPoint;
+                float arriveRadius = hasOrder.ValueRO && !alarmed ? math.max(0f, order.ArriveRadius) : math.max(.25f, swim.ArriveRadius);
+                RecoverIfStuck(entity, ref transform, ref swim, originalTarget, arriveRadius, radius,
+                    !alarmed && !hasOrder.ValueRO);
+
+                if (!CreatureTerrainCollision.TryClear(CollisionWorld, Creatures, entity, transform.Position,
                         radius, WaterSurface, out float3 safeStart)) return;
                 transform.Position = safeStart;
 
-                bool alarmed = CreatureTamingRules.IsAlarmed(alarm, ElapsedTime);
                 float speed = swim.CruiseSpeed;
 
                 if (alarmed)
@@ -101,22 +114,71 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 }
 
                 // Aim at the water too, so a target above the surface does not keep a creature pressed against it.
-                if (CreatureTerrainCollision.TryPlace(CollisionWorld, Creatures, entity, swim.TargetPoint,
+                if (CreatureTerrainCollision.TryClear(CollisionWorld, Creatures, entity, swim.TargetPoint,
                         radius, WaterSurface, out float3 destination))
                     swim.TargetPoint = destination;
                 else
                     swim.TargetPoint = transform.Position;
 
+                float3 navigationTarget = CreatureTerrainCollision.Navigate(CollisionWorld, Creatures, entity,
+                    transform.Position, swim.TargetPoint, radius, speed, WaterSurface, ElapsedTime, ref swim);
                 CreatureSwimStep step = CreatureSwimMath.Advance(transform.Position, transform.Rotation,
-                    swim.TargetPoint, speed, swim.TurnSpeedRadians, DeltaTime);
+                    navigationTarget, speed, swim.TurnSpeedRadians, DeltaTime);
                 float3 next = step.Position;
                 if (!alarmed && !hasOrder.ValueRO)
                     next = CreatureSwimMath.ConstrainToHomeRegion(next, swim, Config);
                 next.y = math.min(next.y, ceiling);
                 next = CreatureTerrainCollision.Move(CollisionWorld, Creatures, entity, transform.Position,
                     next, radius, WaterSurface);
+                float expected = math.distance(transform.Position, step.Position);
+                if (expected > .001f && math.distance(transform.Position, next) < expected * .15f)
+                    swim.BlockedSeconds += DeltaTime;
+                else swim.BlockedSeconds = 0f;
+                if (swim.BlockedSeconds > .75f)
+                {
+                    if (swim.BlockedSeconds - DeltaTime <= .75f) swim.NextAvoidanceTime = 0d;
+                    swim.AvoidanceUntil = 0d;
+                    if (!alarmed && !hasOrder.ValueRO && swim.BlockedSeconds > 2f)
+                    {
+                        swim.NextRepathTime = 0d;
+                        swim.BlockedSeconds = 0f;
+                    }
+                }
                 transform.Position = next;
                 transform.Rotation = step.Rotation;
+            }
+
+            private void RecoverIfStuck(Entity entity, ref LocalTransform transform, ref CreatureSwim swim,
+                float3 target, float arriveRadius, float radius, bool constrainToHome)
+            {
+                float progressDistance = math.max(.4f, radius * .5f);
+                if (swim.CruiseSpeed <= 0f || CreatureSwimMath.HasArrived(transform.Position, target, arriveRadius) ||
+                    math.distancesq(transform.Position, swim.ProgressPosition) >= progressDistance * progressDistance ||
+                    !constrainToHome && math.distancesq(target, swim.ProgressTarget) >= math.max(1f, radius * radius))
+                {
+                    swim.StuckSeconds = 0f;
+                    swim.ProgressPosition = transform.Position;
+                    swim.ProgressTarget = target;
+                    return;
+                }
+                swim.StuckSeconds += DeltaTime;
+                if (swim.StuckSeconds < 10f) return;
+                if (constrainToHome) target = CreatureSwimMath.ConstrainToHomeRegion(target, swim, Config);
+                if (!CreatureTerrainCollision.TryRecover(CollisionWorld, Creatures, entity, target, radius,
+                        WaterSurface, out float3 destination) ||
+                    constrainToHome && math.distancesq(destination,
+                        CreatureSwimMath.ConstrainToHomeRegion(destination, swim, Config)) > .001f)
+                {
+                    swim.StuckSeconds = 8f;
+                    return;
+                }
+                transform.Position = destination;
+                swim.ProgressPosition = destination;
+                swim.ProgressTarget = target;
+                swim.StuckSeconds = 0f;
+                swim.BlockedSeconds = 0f;
+                swim.AvoidanceUntil = 0d;
+                swim.NextAvoidanceTime = 0d;
             }
 
         }

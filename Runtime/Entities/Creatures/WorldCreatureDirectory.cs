@@ -36,7 +36,6 @@ namespace WorldBuilder.Entities.Creatures
                 queued++;
             }
             entities.Dispose();
-            query.Dispose();
             return queued;
         }
 
@@ -52,7 +51,6 @@ namespace WorldBuilder.Entities.Creatures
                 if (filter.Matches(record)) matched++;
             }
             entities.Dispose();
-            query.Dispose();
             return matched;
         }
 
@@ -69,7 +67,6 @@ namespace WorldBuilder.Entities.Creatures
                 if (filter.Matches(record)) destination.Add(record);
             }
             entities.Dispose();
-            query.Dispose();
             return destination.Count;
         }
 
@@ -95,7 +92,6 @@ namespace WorldBuilder.Entities.Creatures
                 found = true;
             }
             entities.Dispose();
-            query.Dispose();
             return found;
         }
 
@@ -115,7 +111,6 @@ namespace WorldBuilder.Entities.Creatures
                 break;
             }
             entities.Dispose();
-            query.Dispose();
             return found;
         }
 
@@ -127,22 +122,26 @@ namespace WorldBuilder.Entities.Creatures
         }
 
         private static EntityQuery CreateCreatureQuery(EntityManager entityManager)
-            => entityManager.CreateEntityQuery(new EntityQueryDesc
-            {
-                All = new[]
-                {
-                    ComponentType.ReadOnly<Creature>(),
-                    ComponentType.ReadOnly<LocalTransform>()
-                },
-                Options = EntityQueryOptions.IncludeDisabledEntities |
-                          EntityQueryOptions.IgnoreComponentEnabledState
-            });
+            => WorldRuntimeLookup.Creatures(entityManager);
+
+        // Records are read many times a frame; turning the same few names into new strings each time was most of the
+        // garbage this file made. There are only as many names as there are kinds of creature.
+        private static readonly Dictionary<FixedString64Bytes, string> NameCache = new();
+
+        private static string NameOf(in FixedString64Bytes name)
+        {
+            if (NameCache.TryGetValue(name, out string text)) return text;
+            if (NameCache.Count > 512) NameCache.Clear();
+            text = name.ToString();
+            NameCache.Add(name, text);
+            return text;
+        }
 
         private static bool TryReadRecord(EntityManager entityManager, Entity entity, out CreatureRecord record)
         {
             record = default;
             if (entity == Entity.Null || !entityManager.Exists(entity) ||
-                !entityManager.HasComponent<Creature>(entity) ||
+                !entityManager.HasComponent<Creature>(entity) || entityManager.HasComponent<DecorativeCreature>(entity) ||
                 !entityManager.HasComponent<LocalTransform>(entity)) return false;
 
             Creature creature = entityManager.GetComponentData<Creature>(entity);
@@ -165,7 +164,7 @@ namespace WorldBuilder.Entities.Creatures
                           (!entityManager.HasComponent<WorldEntityActive>(entity) ||
                            entityManager.IsComponentEnabled<WorldEntityActive>(entity));
 
-            record = new CreatureRecord(entity, identity, prefabId, creature.DisplayName.ToString(), creature.Grade,
+            record = new CreatureRecord(entity, identity, prefabId, NameOf(creature.DisplayName), creature.Grade,
                 creature.SizeClass, creature.Personality,
                 entityManager.GetComponentData<LocalTransform>(entity).Position, region, affinity.Value,
                 affinity.MaximumValue, taming.AttemptCount, taming.IsTamed != 0, active);

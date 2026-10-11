@@ -26,10 +26,16 @@ namespace WorldBuilder.Entities.Creatures.Systems
             DynamicBuffer<CreatureSpawnRequest> requests =
                 state.EntityManager.GetBuffer<CreatureSpawnRequest>(runtime);
             var prefabs = new NativeParallelHashSet<int>(16, Allocator.Temp);
+            using var prefabRates = new NativeParallelHashMap<int, float>(16, Allocator.Temp);
             if (state.EntityManager.HasBuffer<WorldEntityPrefabElement>(runtime))
             {
                 foreach (var entry in state.EntityManager.GetBuffer<WorldEntityPrefabElement>(runtime, true))
-                    if (state.EntityManager.HasComponent<Creature>(entry.Prefab)) prefabs.Add(entry.PrefabId);
+                    if (state.EntityManager.HasComponent<Creature>(entry.Prefab))
+                    {
+                        prefabs.Add(entry.PrefabId);
+                        prefabRates.TryAdd(entry.PrefabId, state.EntityManager.HasComponent<WorldEntitySpawnRate>(entry.Prefab)
+                            ? state.EntityManager.GetComponentData<WorldEntitySpawnRate>(entry.Prefab).Value : 1f);
+                    }
             }
 
             NativeParallelHashSet<int2> loaded = BuildLoadedRegions(state.EntityManager, runtime);
@@ -51,6 +57,10 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 for (int i = 0; i < count; i++)
                 {
                     if (!TrySelectPrefab(state.EntityManager, zoneEntity, value.PrefabId, prefabs, ref random, out int prefabId)) continue;
+                    float individual = prefabRates.TryGetValue(prefabId, out float speciesRate) ? speciesRate : 1f;
+                    float ceiling = state.EntityManager.HasComponent<WorldEntitySpawnRate>(zoneEntity)
+                        ? state.EntityManager.GetComponentData<WorldEntitySpawnRate>(zoneEntity).Value : 1f;
+                    if (individual <= 0f || (individual < ceiling && random.NextFloat() >= individual / ceiling)) continue;
                     float3 position = center + math.rotate(transform.ValueRO.Rotation, random.NextFloat3(-value.HalfExtents, value.HalfExtents));
                     requests.Add(new CreatureSpawnRequest
                     {

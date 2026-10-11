@@ -49,7 +49,8 @@ namespace WorldBuilder.Entities.Creatures.Systems
             RefRW<WorldEntityRuntimeConfig> config = SystemAPI.GetSingletonRW<WorldEntityRuntimeConfig>();
             EntityCommandBuffer commands = new EntityCommandBuffer(Allocator.Temp);
 
-            for (int i = 0; i < requests.Length; i++)
+            int requestCount = math.min(4, requests.Length);
+            for (int i = 0; i < requestCount; i++)
             {
                 CreatureSpawnRequest request = requests[i];
                 if (!prefabMap.TryGetValue(request.PrefabId, out Entity prefab) ||
@@ -167,7 +168,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
             }
 
             config.ValueRW.RegionRevision++;
-            requests.Clear();
+            requests.RemoveRange(0, requestCount);
             commands.Playback(state.EntityManager);
             commands.Dispose();
             prefabMap.Dispose();

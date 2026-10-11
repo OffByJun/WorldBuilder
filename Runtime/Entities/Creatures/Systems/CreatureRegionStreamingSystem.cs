@@ -1,6 +1,7 @@
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
 using WorldBuilder.Entities.Systems;
 
@@ -10,15 +11,31 @@ namespace WorldBuilder.Entities.Creatures.Systems
     [UpdateAfter(typeof(WorldEntityChunkOwnershipSystem))]
     public partial struct CreatureRegionStreamingSystem : ISystem
     {
+        private NativeQueue<Entity> _pendingDespawns;
+        private JobHandle _streamJob;
+
         public void OnCreate(ref SystemState state)
         {
+            _pendingDespawns = new NativeQueue<Entity>(Allocator.Persistent);
             state.RequireForUpdate<WorldEntityRuntimeConfig>();
             state.RequireForUpdate<WorldEntityLoadedRegion>();
             state.RequireForUpdate<CreatureStreaming>();
         }
 
+        public void OnDestroy(ref SystemState state)
+        {
+            state.CompleteDependency();
+            _streamJob.Complete();
+            _pendingDespawns.Dispose();
+        }
+
         public void OnUpdate(ref SystemState state)
         {
+            // Drain the previous frame after its job has finished. Other despawn paths may
+            // already have removed a creature, so validate before the structural change.
+            _streamJob.Complete();
+            while (_pendingDespawns.TryDequeue(out Entity target))
+                if (state.EntityManager.Exists(target)) state.EntityManager.DestroyEntity(target);
             Entity runtime = SystemAPI.GetSingletonEntity<WorldEntityRuntimeConfig>();
             DynamicBuffer<WorldEntityLoadedRegion> regions =
                 state.EntityManager.GetBuffer<WorldEntityLoadedRegion>(runtime, true);
@@ -27,18 +44,14 @@ namespace WorldBuilder.Entities.Creatures.Systems
             NativeParallelHashSet<int2> loaded = new NativeParallelHashSet<int2>(regions.Length, Allocator.TempJob);
             for (int i = 0; i < regions.Length; i++) loaded.Add(regions[i].Coordinate);
 
-            EntityCommandBuffer commands = new EntityCommandBuffer(Allocator.TempJob);
             state.Dependency = new StreamCreaturesJob
             {
                 Loaded = loaded,
                 ElapsedTime = SystemAPI.Time.ElapsedTime,
-                Commands = commands.AsParallelWriter()
+                Despawns = _pendingDespawns.AsParallelWriter()
             }.ScheduleParallel(state.Dependency);
-            state.Dependency.Complete();
-
-            commands.Playback(state.EntityManager);
-            commands.Dispose();
-            loaded.Dispose();
+            state.Dependency = loaded.Dispose(state.Dependency);
+            _streamJob = state.Dependency;
         }
 
         [BurstCompile]
@@ -47,9 +60,9 @@ namespace WorldBuilder.Entities.Creatures.Systems
         {
             [ReadOnly] public NativeParallelHashSet<int2> Loaded;
             public double ElapsedTime;
-            public EntityCommandBuffer.ParallelWriter Commands;
+            public NativeQueue<Entity>.ParallelWriter Despawns;
 
-            private void Execute(Entity entity, [EntityIndexInQuery] int sortKey,
+            private void Execute(Entity entity,
                 ref CreatureStreaming streaming, in WorldEntityChunk ownership,
                 in WorldEntityDescriptor descriptor, in Creature creature)
             {
@@ -67,7 +80,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 }
 
                 if (ElapsedTime - streaming.UnloadedSince >= streaming.DespawnGraceSeconds)
-                    Commands.DestroyEntity(sortKey, entity);
+                    Despawns.Enqueue(entity);
             }
         }
     }

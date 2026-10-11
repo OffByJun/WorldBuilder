@@ -81,6 +81,7 @@ namespace WorldBuilder.Entities.Creatures
     {
         public float MaximumWeight;
         public ushort SlotCount;
+        public int BonusUnits;
     }
 
     [InternalBufferCapacity(2)]
@@ -245,13 +246,16 @@ namespace WorldBuilder.Entities.Creatures
         public int Accepted;
     }
 
+    public struct CreatureWorkExcluded : IComponentData { }
+
     public static class CreatureCarryRules
     {
-        public static int MaximumUnits(float maximumWeight, float unitWeight, int slotCount, int available)
+        public static int MaximumUnits(float maximumWeight, float unitWeight, int slotCount, int available, int bonusUnits = 0)
         {
             if (maximumWeight <= 0f || unitWeight <= 0f || slotCount <= 0 || available <= 0) return 0;
             int byWeight = (int)math.floor(maximumWeight / unitWeight + 1e-5f);
-            return math.min(available, math.min(slotCount, math.max(0, byWeight)));
+            int baseUnits = math.min(slotCount, math.max(0, byWeight));
+            return baseUnits <= 0 ? 0 : math.min(available, baseUnits + math.max(0, bonusUnits));
         }
     }
 }

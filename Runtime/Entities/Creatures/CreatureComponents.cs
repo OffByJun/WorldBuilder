@@ -82,6 +82,9 @@ namespace WorldBuilder.Entities.Creatures
         public uint State;
     }
 
+    public struct DecorativeCreature : IComponentData { }
+    public struct CreatureImmobilized : IComponentData { }
+
     public struct CreatureSwim : IComponentData
     {
         // Unscaled radius enclosing the visible model, including child offsets and wings.
@@ -98,6 +101,15 @@ namespace WorldBuilder.Entities.Creatures
         public double NextRepathTime;
         public float RegionMargin;
         public byte LeashToHomeRegion;
+        public float3 AvoidancePoint;
+        public float3 AvoidanceTarget;
+        public float3 AvoidanceDirection;
+        public double NextAvoidanceTime;
+        public double AvoidanceUntil;
+        public float BlockedSeconds;
+        public float StuckSeconds;
+        public float3 ProgressPosition;
+        public float3 ProgressTarget;
     }
 
     /// <summary>

@@ -102,7 +102,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
 
             foreach (var (settlement, aptitude, work, worker) in
                      SystemAPI.Query<RefRO<CreatureSettlement>, RefRO<CreatureRoleAptitude>,
-                         RefRW<CreatureWorkState>>().WithAll<CreatureSettled>().WithEntityAccess())
+                         RefRW<CreatureWorkState>>().WithAll<CreatureSettled>().WithNone<CreatureWorkExcluded>().WithEntityAccess())
             {
                 if (work.ValueRO.Phase != CreatureWorkPhase.Idle) continue;
 
@@ -159,6 +159,21 @@ namespace WorldBuilder.Entities.Creatures.Systems
                      SystemAPI.Query<RefRW<CreatureWorkState>, RefRO<CreatureSettlement>, RefRO<LocalTransform>,
                          EnabledRefRW<CreatureMoveOrder>>().WithAll<CreatureSettled>().WithEntityAccess())
             {
+                if (entityManager.HasComponent<CreatureWorkExcluded>(worker) &&
+                    (work.ValueRO.Phase == CreatureWorkPhase.MoveToSite || work.ValueRO.Phase == CreatureWorkPhase.Interact))
+                {
+                    Entity siteEntity = work.ValueRO.Site;
+                    if (IsValidSite(entityManager, siteEntity, worker))
+                    {
+                        CreatureWorkSite site = entityManager.GetComponentData<CreatureWorkSite>(siteEntity);
+                        site.Claimant = Entity.Null;
+                        site.State = CreatureWorkSiteState.Ready;
+                        entityManager.SetComponentData(siteEntity, site);
+                        entityManager.SetComponentEnabled<CreatureWorkSiteReady>(siteEntity, true);
+                    }
+                    Abort(work, order);
+                    continue;
+                }
                 switch (work.ValueRO.Phase)
                 {
                     case CreatureWorkPhase.MoveToSite:
@@ -234,7 +249,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 };
             work.ValueRW.CarriedItemId = site.OutputItemId;
             work.ValueRW.CarriedCount = CreatureCarryRules.MaximumUnits(carry.MaximumWeight, unitWeight,
-                math.min(carry.SlotCount, math.max(1, settlement.ValueRO.CarryCapacity)), site.OutputCount);
+                math.min(carry.SlotCount, math.max(1, settlement.ValueRO.CarryCapacity)), site.OutputCount, carry.BonusUnits);
             work.ValueRW.CarriedUnitWeight = unitWeight;
 
             // Do not consume a work site when this species cannot lift even one output item.
