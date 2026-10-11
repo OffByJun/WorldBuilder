@@ -41,6 +41,11 @@ namespace WorldBuilder.Entities
         public WorldEntityFlags Flags;
     }
 
+    public struct WorldEntitySpawnRate : IComponentData
+    {
+        public float Value;
+    }
+
     public struct WorldEntityChunk : IComponentData
     {
         public int2 Chunk;
@@ -88,6 +93,7 @@ namespace WorldBuilder.Entities
         public float3 Velocity;
         public float RemainingLifetime;
         public float ResourceHealth;
+        public Unity.Collections.FixedList64Bytes<float> ResourcePieceHealth;
         public float ResourceRespawnRemaining;
         public int DroppedItemId;
         public int DroppedItemCount;

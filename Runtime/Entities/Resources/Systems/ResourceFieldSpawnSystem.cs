@@ -29,6 +29,9 @@ namespace WorldBuilder.Entities.Resources.Systems
             }
             if (!hasDueZone) return;
 
+            EntityQuery exclusionsQuery = SystemAPI.QueryBuilder().WithAll<ResourceSpawnExclusion>().Build();
+            using NativeArray<ResourceSpawnExclusion> exclusions = exclusionsQuery.ToComponentDataArray<ResourceSpawnExclusion>(Allocator.Temp);
+
             Entity runtime = SystemAPI.GetSingletonEntity<WorldEntityRuntimeConfig>();
             DynamicBuffer<WorldEntityPrefabElement> prefabs =
                 state.EntityManager.GetBuffer<WorldEntityPrefabElement>(runtime, true);
@@ -39,25 +42,43 @@ namespace WorldBuilder.Entities.Resources.Systems
             RefRW<WorldEntityRuntimeConfig> config = SystemAPI.GetSingletonRW<WorldEntityRuntimeConfig>();
             EntityCommandBuffer commands = new EntityCommandBuffer(Allocator.Temp);
             NativeList<Unity.Physics.RaycastHit> hits = new NativeList<Unity.Physics.RaycastHit>(Allocator.Temp);
+            NativeList<float3> pendingPositions = new NativeList<float3>(Allocator.Temp);
+            int remainingAttempts = 4;
 
             foreach (var (zone, transform, spawned, points, zoneEntity) in
                      SystemAPI.Query<RefRW<ResourceFieldSpawnZone>, RefRO<LocalTransform>,
                          DynamicBuffer<ResourceFieldSpawnedEntity>, DynamicBuffer<ResourceFieldSpawnPoint>>()
                          .WithEntityAccess())
             {
+                if (remainingAttempts == 0) break;
+                if (elapsed < zone.ValueRO.NextSpawnTime) continue;
                 PruneDestroyed(state.EntityManager, spawned);
-                if (zone.ValueRO.MaximumAlive <= spawned.Length || elapsed < zone.ValueRO.NextSpawnTime) continue;
+                if (zone.ValueRO.MaximumAlive <= spawned.Length)
+                {
+                    zone.ValueRW.PendingSpawnAttempts = 0;
+                    zone.ValueRW.NextSpawnTime = elapsed + math.max(1f, zone.ValueRO.SpawnInterval);
+                    continue;
+                }
 
                 ResourceFieldSpawnZone value = zone.ValueRO;
+                pendingPositions.Clear();
                 bool hasEntries = state.EntityManager.HasBuffer<ResourceFieldSpawnEntry>(zoneEntity);
                 DynamicBuffer<ResourceFieldSpawnEntry> entries = hasEntries
                     ? state.EntityManager.GetBuffer<ResourceFieldSpawnEntry>(zoneEntity, true) : default;
                 Random random = Random.CreateFromIndex(value.RandomState == 0 ? 1u : value.RandomState);
-                int count = math.min(value.SpawnPerTick, value.MaximumAlive - spawned.Length);
+                int requested = math.min(value.PendingSpawnAttempts > 0 ? value.PendingSpawnAttempts : value.SpawnPerTick,
+                    value.MaximumAlive - spawned.Length);
+                int count = math.min(requested, math.min(1, remainingAttempts));
+                remainingAttempts -= count;
                 for (int i = 0; i < count; i++)
                 {
                     if (!TrySelectEntry(ref random, value, hasEntries, entries, prefabMap,
                             state.EntityManager, out ResourceFieldSpawnEntry selected, out Entity prefab)) continue;
+                    float individualRate = state.EntityManager.HasComponent<WorldEntitySpawnRate>(prefab)
+                        ? state.EntityManager.GetComponentData<WorldEntitySpawnRate>(prefab).Value : 1f;
+                    float ceiling = state.EntityManager.HasComponent<WorldEntitySpawnRate>(zoneEntity)
+                        ? state.EntityManager.GetComponentData<WorldEntitySpawnRate>(zoneEntity).Value : 1f;
+                    if (individualRate <= 0f || (individualRate < ceiling && random.NextFloat() >= individualRate / ceiling)) continue;
                     if (!TryGetPointInZone(ref random, points, out float2 normalizedPoint)) continue;
 
                     float3 localOffset = new float3(normalizedPoint.x * value.HalfExtents.x, 0f,
@@ -77,6 +98,10 @@ namespace WorldBuilder.Entities.Resources.Systems
                             out Unity.Physics.RaycastHit hit)) continue;
                     float3 groundPosition = hit.Position;
                     float3 groundNormal = hit.SurfaceNormal;
+                    if (IsExcluded(groundPosition, exclusions)) continue;
+                    if (value.MinimumSpacing > 0f && TooClose(state.EntityManager, spawned,
+                            pendingPositions, groundPosition, value.MinimumSpacing)) continue;
+                    pendingPositions.Add(groundPosition);
 
                     Entity instance = commands.Instantiate(prefab);
                     config.ValueRW.NextRuntimeId++;
@@ -88,6 +113,7 @@ namespace WorldBuilder.Entities.Resources.Systems
                     commands.SetComponent(instance,
                         LocalTransform.FromPositionRotationScale(groundPosition + groundNormal * 0.03f,
                             value.Kind == ResourceFieldSpawnKind.DroppedItem
+                                || state.EntityManager.HasComponent<ResourceNodePieces>(prefab)
                                 ? SurfaceRotation(groundNormal)
                                 : quaternion.identity,
                             state.EntityManager.HasComponent<LocalTransform>(prefab)
@@ -114,7 +140,8 @@ namespace WorldBuilder.Entities.Resources.Systems
                 }
 
                 value.RandomState = random.NextUInt();
-                value.NextSpawnTime = elapsed + value.SpawnInterval;
+                value.PendingSpawnAttempts = requested - count;
+                value.NextSpawnTime = elapsed + (value.PendingSpawnAttempts > 0 ? .1f : value.SpawnInterval);
                 zone.ValueRW = value;
             }
 
@@ -122,6 +149,7 @@ namespace WorldBuilder.Entities.Resources.Systems
             commands.Playback(state.EntityManager);
             commands.Dispose();
             hits.Dispose();
+            pendingPositions.Dispose();
             prefabMap.Dispose();
         }
 
@@ -197,6 +225,26 @@ namespace WorldBuilder.Entities.Resources.Systems
             }
 
             return inside;
+        }
+
+        private static bool TooClose(EntityManager manager, DynamicBuffer<ResourceFieldSpawnedEntity> spawned,
+            NativeList<float3> pending, float3 position, float spacing)
+        {
+            float distanceSquared = spacing * spacing;
+            foreach (var entry in spawned)
+                if (manager.Exists(entry.Value) && manager.HasComponent<LocalTransform>(entry.Value) &&
+                    math.distancesq(position.xz, manager.GetComponentData<LocalTransform>(entry.Value).Position.xz) < distanceSquared)
+                    return true;
+            foreach (float3 other in pending)
+                if (math.distancesq(position.xz, other.xz) < distanceSquared) return true;
+            return false;
+        }
+
+        private static bool IsExcluded(float3 position, NativeArray<ResourceSpawnExclusion> exclusions)
+        {
+            foreach (var exclusion in exclusions)
+                if (exclusion.Contains(position)) return true;
+            return false;
         }
 
         private static bool TryGetTerrainHit(EntityManager entityManager,

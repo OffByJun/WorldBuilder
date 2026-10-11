@@ -1,4 +1,5 @@
 using System;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics;
@@ -8,6 +9,17 @@ namespace WorldBuilder.Entities.Resources
 {
     public static class WorldResourceCommandQueue
     {
+        public static void DestroyHierarchy(EntityManager manager, EntityCommandBuffer commands, Entity entity)
+        {
+            // Instantiated prefabs own their children through LinkedEntityGroup. Scene-baked roots do not.
+            if (!manager.HasBuffer<LinkedEntityGroup>(entity) && manager.HasBuffer<Unity.Transforms.Child>(entity))
+            {
+                foreach (var child in manager.GetBuffer<Unity.Transforms.Child>(entity, true))
+                    if (manager.Exists(child.Value)) DestroyHierarchy(manager, commands, child.Value);
+            }
+            commands.DestroyEntity(entity);
+        }
+
         private static uint nextRequestId;
 
         public static bool TryGetInteractionInfo(Entity target, out ResourceInteractionInfo info)
@@ -34,16 +46,7 @@ namespace WorldBuilder.Entities.Resources
             target = Entity.Null;
             fraction = 1f;
             if (!TryGetRuntime(out EntityManager entityManager, out _)) return false;
-            EntityQuery physicsQuery = entityManager.CreateEntityQuery(ComponentType.ReadOnly<PhysicsWorldSingleton>());
-            if (physicsQuery.CalculateEntityCount() != 1)
-            {
-                physicsQuery.Dispose();
-                return false;
-            }
-
-            entityManager.CompleteDependencyBeforeRO<PhysicsWorldSingleton>();
-            PhysicsWorldSingleton physics = physicsQuery.GetSingleton<PhysicsWorldSingleton>();
-            physicsQuery.Dispose();
+            if (!WorldRuntimeLookup.TryGetPhysics(out PhysicsWorldSingleton physics)) return false;
             float3 start = origin;
             float3 end = start + math.normalizesafe((float3)direction, new float3(0f, 0f, 1f)) * math.max(0f, distance);
             RaycastInput input = new RaycastInput
@@ -60,7 +63,7 @@ namespace WorldBuilder.Entities.Resources
         }
 
         public static bool TryHarvest(Entity target, HarvestMethod method, int toolItemId,
-            byte toolTier, float toolPower, float damage, out uint requestId)
+            byte toolTier, float toolPower, float damage, out uint requestId, int pieceIndex = -1, bool grantToInventory = false)
         {
             requestId = 0;
             if (!TryGetRuntime(out EntityManager entityManager, out Entity runtime) ||
@@ -74,7 +77,9 @@ namespace WorldBuilder.Entities.Resources
                 ToolItemId = toolItemId,
                 ToolTier = toolTier,
                 ToolPower = math.max(0f, toolPower),
-                Damage = math.max(0f, damage)
+                Damage = math.max(0f, damage),
+                PieceIndex = pieceIndex, HasTargetPiece = (byte)(pieceIndex >= 0 ? 1 : 0),
+                GrantToInventory = (byte)(grantToInventory ? 1 : 0)
             });
             return true;
         }
@@ -100,21 +105,33 @@ namespace WorldBuilder.Entities.Resources
                 !entityManager.HasBuffer<InventoryGrantRequest>(runtime) ||
                 !entityManager.HasBuffer<InventoryGrantResult>(runtime)) return 0;
             DynamicBuffer<InventoryGrantRequest> requests = entityManager.GetBuffer<InventoryGrantRequest>(runtime);
-            DynamicBuffer<InventoryGrantResult> results = entityManager.GetBuffer<InventoryGrantResult>(runtime);
-            int processed = requests.Length;
-            for (int i = 0; i < requests.Length; i++)
+            if (requests.IsEmpty) return 0;
+            // Inventory notifications may change ECS entities and invalidate every live buffer reference.
+            using var pending = requests.ToNativeArray(Allocator.Temp);
+            requests.Clear();
+            int processed = pending.Length;
+            for (int i = 0; i < pending.Length; i++)
             {
-                InventoryGrantRequest request = requests[i];
+                InventoryGrantRequest request = pending[i];
                 int accepted = math.clamp(acceptItems(request.ItemId, request.RequestedCount), 0,
                     request.RequestedCount);
-                results.Add(new InventoryGrantResult
+                if (request.IsHarvest != 0)
+                {
+                    if (accepted < request.RequestedCount)
+                    {
+                        var drop = request.HarvestDrop;
+                        drop.Count = request.RequestedCount - accepted;
+                        entityManager.GetBuffer<ResourceDropSpawnRequest>(runtime).Add(drop);
+                    }
+                    continue;
+                }
+                entityManager.GetBuffer<InventoryGrantResult>(runtime).Add(new InventoryGrantResult
                 {
                     RequestId = request.RequestId,
                     Target = request.Target,
                     AcceptedCount = accepted
                 });
             }
-            requests.Clear();
             return processed;
         }
 
@@ -124,10 +141,11 @@ namespace WorldBuilder.Entities.Resources
             if (!TryGetRuntime(out EntityManager entityManager, out Entity runtime) ||
                 !entityManager.HasBuffer<ResourceHarvestResult>(runtime)) return 0;
             DynamicBuffer<ResourceHarvestResult> results = entityManager.GetBuffer<ResourceHarvestResult>(runtime);
-            int count = results.Length;
-            for (int i = 0; i < results.Length; i++) visitor(results[i]);
+            if (results.IsEmpty) return 0;
+            using var pending = results.ToNativeArray(Allocator.Temp);
             results.Clear();
-            return count;
+            for (int i = 0; i < pending.Length; i++) visitor(pending[i]);
+            return pending.Length;
         }
 
         private static uint NextRequestId()
@@ -141,20 +159,6 @@ namespace WorldBuilder.Entities.Resources
         }
 
         private static bool TryGetRuntime(out EntityManager entityManager, out Entity runtime)
-        {
-            World world = World.DefaultGameObjectInjectionWorld;
-            if (world == null || !world.IsCreated)
-            {
-                entityManager = default;
-                runtime = Entity.Null;
-                return false;
-            }
-            entityManager = world.EntityManager;
-            EntityQuery query = entityManager.CreateEntityQuery(ComponentType.ReadOnly<WorldEntityRuntimeConfig>());
-            bool found = query.CalculateEntityCount() == 1;
-            runtime = found ? query.GetSingletonEntity() : Entity.Null;
-            query.Dispose();
-            return found;
-        }
+            => WorldRuntimeLookup.TryGetRuntime(out entityManager, out runtime);
     }
 }

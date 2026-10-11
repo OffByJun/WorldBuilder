@@ -30,6 +30,7 @@ namespace WorldBuilder.Entities.Resources.Authoring
         };
         [Min(0.1f), SerializeField] private float raycastHeight = 20f;
         [Range(0f, 1f), SerializeField] private float minimumGroundNormalY = 0.45f;
+        [Min(0f), SerializeField] private float minimumSpacing;
         [Min(0.01f), SerializeField] private float spawnInterval = 5f;
         [Min(0), SerializeField] private int maximumAlive = 16;
         [Min(1), SerializeField] private int spawnPerTick = 2;
@@ -37,6 +38,7 @@ namespace WorldBuilder.Entities.Resources.Authoring
 
         private void OnValidate()
         {
+            minimumSpacing = Mathf.Max(0f, minimumSpacing);
             foreach (var entry in spawnEntries ?? Array.Empty<WorldBuilder.Entities.Authoring.SpawnZoneEntryAuthoring>())
                 if (entry != null) entry.Weight = float.IsNaN(entry.Weight) ? 0f : Mathf.Clamp01(entry.Weight);
             size = new Vector3(Mathf.Max(0.1f, size.x), Mathf.Max(0.1f, size.y), Mathf.Max(0.1f, size.z));
@@ -65,6 +67,7 @@ namespace WorldBuilder.Entities.Resources.Authoring
                     HalfExtents = authoring.size * 0.5f,
                     RaycastHeight = authoring.raycastHeight,
                     MinimumGroundNormalY = authoring.minimumGroundNormalY,
+                    MinimumSpacing = authoring.minimumSpacing,
                     SpawnInterval = authoring.spawnInterval,
                     MaximumAlive = Mathf.Max(0, authoring.maximumAlive),
                     SpawnPerTick = Mathf.Max(1, authoring.spawnPerTick),

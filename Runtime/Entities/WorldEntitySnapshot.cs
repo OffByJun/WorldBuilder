@@ -17,6 +17,7 @@ namespace WorldBuilder.Entities
         public float3 Velocity;
         public float RemainingLifetime;
         public float ResourceHealth;
+        public FixedList64Bytes<float> ResourcePieceHealth;
         public float ResourceRespawnRemaining;
         public int DroppedItemId;
         public int DroppedItemCount;
@@ -76,6 +77,8 @@ namespace WorldBuilder.Entities
                 {
                     snapshot.StateFlags |= WorldEntitySpawnRequestFlags.RestoreResourceHealth;
                     snapshot.ResourceHealth = entityManager.GetComponentData<ResourceNode>(entity).Health;
+                    if (entityManager.HasComponent<ResourcePieceState>(entity))
+                        snapshot.ResourcePieceHealth = entityManager.GetComponentData<ResourcePieceState>(entity).Health;
                     if (entityManager.HasComponent<Disabled>(entity) &&
                         entityManager.HasComponent<ResourceRespawnState>(entity))
                     {

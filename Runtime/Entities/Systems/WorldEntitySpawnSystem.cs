@@ -35,7 +35,8 @@ namespace WorldBuilder.Entities.Systems
 
             RefRW<WorldEntityRuntimeConfig> config = SystemAPI.GetSingletonRW<WorldEntityRuntimeConfig>();
             EntityCommandBuffer commands = new EntityCommandBuffer(Allocator.Temp);
-            for (int i = 0; i < requests.Length; i++)
+            int requestCount = Unity.Mathematics.math.min(16, requests.Length);
+            for (int i = 0; i < requestCount; i++)
             {
                 WorldEntitySpawnRequest request = requests[i];
                 if (!prefabMap.TryGetValue(request.PrefabId, out Entity prefab)) continue;
@@ -67,6 +68,8 @@ namespace WorldBuilder.Entities.Systems
                 {
                     ResourceNode resource = state.EntityManager.GetComponentData<ResourceNode>(prefab);
                     resource.Health = request.ResourceHealth;
+                    if (state.EntityManager.HasComponent<ResourcePieceState>(prefab))
+                        commands.SetComponent(instance, new ResourcePieceState { Health = request.ResourcePieceHealth });
                     commands.SetComponent(instance, resource);
                 }
                 if ((request.StateFlags & WorldEntitySpawnRequestFlags.RestoreResourceRespawn) != 0)
@@ -89,7 +92,7 @@ namespace WorldBuilder.Entities.Systems
             }
 
             config.ValueRW.RegionRevision++;
-            requests.Clear();
+            requests.RemoveRange(0, requestCount);
             commands.Playback(state.EntityManager);
             commands.Dispose();
             prefabMap.Dispose();

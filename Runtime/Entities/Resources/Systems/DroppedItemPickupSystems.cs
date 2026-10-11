@@ -66,7 +66,7 @@ namespace WorldBuilder.Entities.Resources.Systems
                 DroppedItem item = state.EntityManager.GetComponentData<DroppedItem>(result.Target);
                 item.Count -= math.clamp(result.AcceptedCount, 0, item.Count);
                 if (item.Count <= 0)
-                    commands.DestroyEntity(result.Target);
+                    WorldResourceCommandQueue.DestroyHierarchy(state.EntityManager, commands, result.Target);
                 else
                 {
                     state.EntityManager.SetComponentData(result.Target, item);

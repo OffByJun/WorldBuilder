@@ -44,6 +44,70 @@ namespace WorldBuilder.Entities.Resources
         public uint DepletionCount;
     }
 
+    public struct ResourceSpawnExclusion : IComponentData
+    {
+        public Unity.Mathematics.float3 Minimum;
+        public Unity.Mathematics.float3 Maximum;
+
+        public bool Contains(Unity.Mathematics.float3 position)
+            => Unity.Mathematics.math.all(position >= Minimum) && Unity.Mathematics.math.all(position <= Maximum);
+    }
+
+    /// <summary>Shares the procedural layout's piece count with harvesting, including restored nodes.</summary>
+    public struct ResourceNodePieces : IComponentData
+    {
+        public const byte SeaweedKind = 255;
+        public byte Kind;
+        public int MinimumDropMultiplier;
+        public int MaximumDropMultiplier;
+
+        public static int PositionSeed(Unity.Mathematics.float3 position, byte kind)
+        {
+            unchecked
+            {
+                int seed = (int)Unity.Mathematics.math.round(position.x * 100f) * 73856093;
+                seed ^= (int)Unity.Mathematics.math.round(position.y * 100f) * 19349663;
+                seed ^= (int)Unity.Mathematics.math.round(position.z * 100f) * 83492791;
+                seed ^= ((kind == SeaweedKind ? 0 : kind) + 1) * 1640531513;
+                return kind == SeaweedKind ? seed ^ 192791 : seed;
+            }
+        }
+
+        public static int RemainingCount(byte kind, int seed, float healthFraction)
+        {
+            var random = new System.Random(seed);
+            int count;
+            if (kind == SeaweedKind) count = random.Next(3, 6);
+            else
+            {
+                random.NextDouble();
+                count = kind == 1 ? random.Next(6, 10) : random.Next(5, 9);
+            }
+            return (int)Unity.Mathematics.math.ceil(count * Unity.Mathematics.math.saturate(healthFraction) - .0001f);
+        }
+    }
+
+    public struct ResourcePieceState : IComponentData
+    {
+        public FixedList64Bytes<float> Health;
+        public int BrokenMask
+        {
+            get
+            {
+                int mask = 0;
+                for (int i = 0; i < Health.Length; i++) if (Health[i] <= .0001f) mask |= 1 << i;
+                return mask;
+            }
+        }
+
+        public void Initialize(int count, float healthFraction)
+        {
+            Health.Clear();
+            float available = count * Unity.Mathematics.math.saturate(healthFraction);
+            for (int i = 0; i < count; i++) Health.Add(Unity.Mathematics.math.saturate(available - i));
+        }
+    }
+
     [InternalBufferCapacity(4)]
     public struct ResourceDrop : IBufferElementData
     {
@@ -91,10 +155,12 @@ namespace WorldBuilder.Entities.Resources
         public Unity.Mathematics.float3 HalfExtents;
         public float RaycastHeight;
         public float MinimumGroundNormalY;
+        public float MinimumSpacing;
         public float SpawnInterval;
         public double NextSpawnTime;
         public int MaximumAlive;
         public int SpawnPerTick;
+        public int PendingSpawnAttempts;
         public uint RandomState;
     }
 
@@ -132,6 +198,9 @@ namespace WorldBuilder.Entities.Resources
         public byte ToolTier;
         public float ToolPower;
         public float Damage;
+        public int PieceIndex;
+        public byte HasTargetPiece;
+        public byte GrantToInventory;
     }
 
     [InternalBufferCapacity(0)]
@@ -168,6 +237,8 @@ namespace WorldBuilder.Entities.Resources
         public Entity Target;
         public int ItemId;
         public int RequestedCount;
+        public byte IsHarvest;
+        public ResourceDropSpawnRequest HarvestDrop;
     }
 
     [InternalBufferCapacity(0)]
