@@ -1,6 +1,7 @@
 using System;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Mathematics;
 
 namespace WorldBuilder.Entities.Resources
 {
@@ -87,9 +88,37 @@ namespace WorldBuilder.Entities.Resources
         }
     }
 
+    /// <summary>
+    /// Where each harvested piece was cut, as a fraction of its height (seaweed stalks leave a stump at the hit point).
+    /// Only meaningful for pieces whose <see cref="ResourcePieceState"/> health is zero.
+    /// </summary>
+    public struct ResourcePieceCut : IComponentData
+    {
+        public FixedList32Bytes<byte> Height;
+
+        public float Get(int piece) => piece >= 0 && piece < Height.Length ? Height[piece] / 255f : 0f;
+
+        public void Set(int piece, float height)
+        {
+            if (piece < 0 || piece >= Height.Capacity) return;
+            while (Height.Length <= piece) Height.Add(0);
+            Height[piece] = (byte)Unity.Mathematics.math.round(Unity.Mathematics.math.saturate(height) * 255f);
+        }
+    }
+
     public struct ResourcePieceState : IComponentData
     {
         public FixedList64Bytes<float> Health;
+        public FixedList128Bytes<float3> Impacts;
+        public int ImpactMask;
+
+        public void SetImpact(int piece, float3 point)
+        {
+            if (piece < 0 || piece >= Impacts.Capacity || (ImpactMask & (1 << piece)) != 0) return;
+            while (Impacts.Length <= piece) Impacts.Add(default);
+            Impacts[piece] = point;
+            ImpactMask |= 1 << piece;
+        }
         public int BrokenMask
         {
             get
@@ -103,6 +132,8 @@ namespace WorldBuilder.Entities.Resources
         public void Initialize(int count, float healthFraction)
         {
             Health.Clear();
+            Impacts.Clear();
+            ImpactMask = 0;
             float available = count * Unity.Mathematics.math.saturate(healthFraction);
             for (int i = 0; i < count; i++) Health.Add(Unity.Mathematics.math.saturate(available - i));
         }
@@ -201,6 +232,11 @@ namespace WorldBuilder.Entities.Resources
         public int PieceIndex;
         public byte HasTargetPiece;
         public byte GrantToInventory;
+        /// <summary>Hit height along the targeted piece (0 = base, 1 = tip); used when <see cref="HasCut"/> is set.</summary>
+        public float CutHeight;
+        public byte HasCut;
+        public float3 HitPoint;
+        public byte HasHitPoint;
     }
 
     [InternalBufferCapacity(0)]

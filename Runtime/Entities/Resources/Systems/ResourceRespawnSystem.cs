@@ -30,6 +30,7 @@ namespace WorldBuilder.Entities.Resources.Systems
             {
                 DeltaTime = SystemAPI.Time.DeltaTime * rate,
                 Pieces = state.GetComponentLookup<ResourcePieceState>(),
+                Cuts = state.GetComponentLookup<ResourcePieceCut>(),
                 Positions = state.GetComponentLookup<Unity.Transforms.LocalTransform>(true),
                 Rates = state.GetComponentLookup<WorldEntitySpawnRate>(true),
                 Exclusions = exclusions,
@@ -46,6 +47,7 @@ namespace WorldBuilder.Entities.Resources.Systems
         {
             public float DeltaTime;
             [NativeDisableParallelForRestriction] public ComponentLookup<ResourcePieceState> Pieces;
+            [NativeDisableParallelForRestriction] public ComponentLookup<ResourcePieceCut> Cuts;
             [ReadOnly] public ComponentLookup<Unity.Transforms.LocalTransform> Positions;
             [ReadOnly] public ComponentLookup<WorldEntitySpawnRate> Rates;
             [ReadOnly] public NativeArray<ResourceSpawnExclusion> Exclusions;
@@ -69,6 +71,7 @@ namespace WorldBuilder.Entities.Resources.Systems
                 node.Health = node.MaxHealth;
                 node.NextHitTime = 0d;
                 if (Pieces.HasComponent(entity)) Pieces[entity] = default;
+                if (Cuts.HasComponent(entity)) Cuts[entity] = default;
                 Commands.RemoveComponent<Disabled>(sortKey, entity);
             }
         }

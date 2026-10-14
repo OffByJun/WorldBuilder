@@ -60,6 +60,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 if (captured.ValueRO || !active.ValueRO || Immobilized.HasComponent(entity))
                 {
                     swim.StuckSeconds = 0f;
+                    swim.CurrentSpeed = swim.YawRate = swim.PitchRate = 0f;
                     return;
                 }
 
@@ -93,7 +94,12 @@ namespace WorldBuilder.Entities.Creatures.Systems
                     swim.NextRepathTime = ElapsedTime;
                     if (CreatureSwimMath.HasArrived(transform.Position, order.Target,
                             math.max(0f, order.ArriveRadius)))
+                    {
+                        swim.CurrentSpeed = swim.YawRate = swim.PitchRate = 0f;
+                        // Resting swimmers level out instead of freezing nose-down after a descent.
+                        transform.Rotation = CreatureSwimMath.LevelOut(transform.Rotation, DeltaTime);
                         return;
+                    }
                     speed *= math.max(0.1f, order.SpeedMultiplier);
                 }
                 else if (CreatureSwimMath.ShouldRepath(swim, transform.Position, ElapsedTime))
@@ -123,8 +129,11 @@ namespace WorldBuilder.Entities.Creatures.Systems
 
                 float3 navigationTarget = CreatureTerrainCollision.Navigate(CollisionWorld, Creatures, entity,
                     transform.Position, swim.TargetPoint, radius, speed, WaterSurface, ElapsedTime, ref swim);
-                CreatureSwimStep step = CreatureSwimMath.Advance(transform.Position, transform.Rotation,
-                    navigationTarget, speed, swim.TurnSpeedRadians, DeltaTime);
+                // Fleeing and following the player need quicker turns than idle wandering.
+                float turnSpeed = swim.TurnSpeedRadians * (alarmed ? 1.6f : hasOrder.ValueRO ? 1.3f : 1f);
+                CreatureSwimStep step = CreatureSwimMath.AdvanceSmooth(transform.Position, transform.Rotation,
+                    navigationTarget, speed, turnSpeed, DeltaTime,
+                    ref swim.CurrentSpeed, ref swim.YawRate, ref swim.PitchRate);
                 float3 next = step.Position;
                 if (!alarmed && !hasOrder.ValueRO)
                     next = CreatureSwimMath.ConstrainToHomeRegion(next, swim, Config);

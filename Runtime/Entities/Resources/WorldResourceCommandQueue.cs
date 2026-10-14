@@ -64,7 +64,8 @@ namespace WorldBuilder.Entities.Resources
         }
 
         public static bool TryHarvest(Entity target, HarvestMethod method, int toolItemId,
-            byte toolTier, float toolPower, float damage, out uint requestId, int pieceIndex = -1, bool grantToInventory = false)
+            byte toolTier, float toolPower, float damage, out uint requestId, int pieceIndex = -1, bool grantToInventory = false,
+            float cutHeight = -1f, Vector3? hitPoint = null)
         {
             requestId = 0;
             if (!TryGetRuntime(out EntityManager entityManager, out Entity runtime) ||
@@ -80,7 +81,10 @@ namespace WorldBuilder.Entities.Resources
                 ToolPower = math.max(0f, toolPower),
                 Damage = math.max(0f, damage),
                 PieceIndex = pieceIndex, HasTargetPiece = (byte)(pieceIndex >= 0 ? 1 : 0),
-                GrantToInventory = (byte)(grantToInventory ? 1 : 0)
+                GrantToInventory = (byte)(grantToInventory ? 1 : 0),
+                CutHeight = math.saturate(cutHeight), HasCut = (byte)(pieceIndex >= 0 && cutHeight >= 0f ? 1 : 0),
+                HitPoint = hitPoint.HasValue ? (float3)hitPoint.Value : default,
+                HasHitPoint = (byte)(hitPoint.HasValue ? 1 : 0)
             });
             return true;
         }

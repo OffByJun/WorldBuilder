@@ -110,6 +110,11 @@ namespace WorldBuilder.Entities.Creatures
         public float StuckSeconds;
         public float3 ProgressPosition;
         public float3 ProgressTarget;
+        // Smooth swimming (CreatureSwimMath.AdvanceSmooth): the body's current speed and turn rates. They start at
+        // zero and accelerate, so a creature eases into and out of every turn instead of snapping to a new heading.
+        public float CurrentSpeed;
+        public float YawRate;
+        public float PitchRate;
     }
 
     /// <summary>

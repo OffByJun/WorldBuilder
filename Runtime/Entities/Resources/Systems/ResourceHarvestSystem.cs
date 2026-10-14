@@ -45,8 +45,8 @@ namespace WorldBuilder.Entities.Resources.Systems
                 bool hasPieces = state.EntityManager.HasComponent<ResourceNodePieces>(request.Target);
                 bool individual = state.EntityManager.HasComponent<ResourcePieceState>(request.Target);
                 int brokenPiece = -1;
-                bool inventory = request.GrantToInventory != 0 && request.Method == HarvestMethod.Pickaxe && hasPieces &&
-                    state.EntityManager.GetComponentData<ResourceNodePieces>(request.Target).Kind != ResourceNodePieces.SeaweedKind;
+                bool inventory = request.GrantToInventory != 0 && hasPieces &&
+                    request.Method is HarvestMethod.Pickaxe or HarvestMethod.Axe;
                 float damage = math.max(0f, request.Damage);
                 if (individual && node.MaxHealth > 0f)
                 {
@@ -64,7 +64,24 @@ namespace WorldBuilder.Entities.Resources.Systems
                         results.Add(CreateResult(request, HarvestFailureReason.InvalidTarget, node.Health, false));
                         continue;
                     }
-                    pieces.Health[selected] = math.max(0f, pieces.Health[selected] - damage / node.MaxHealth);
+                    float pieceDamage = damage / node.MaxHealth;
+                    if (kind != ResourceNodePieces.SeaweedKind && request.HasHitPoint != 0 && pieceDamage > 0f)
+                    {
+                        var transform = state.EntityManager.GetComponentData<LocalTransform>(request.Target);
+                        float3 localPoint = math.rotate(math.inverse(transform.Rotation), request.HitPoint - transform.Position) / transform.Scale;
+                        pieces.SetImpact(selected, localPoint);
+                    }
+                    if (kind == ResourceNodePieces.SeaweedKind) pieceDamage = math.min(.5f, pieceDamage);
+                    pieces.Health[selected] = math.max(0f, pieces.Health[selected] - pieceDamage);
+                    if (kind == ResourceNodePieces.SeaweedKind && request.HasCut != 0 && pieceDamage > 0f)
+                    {
+                        if (state.EntityManager.HasComponent<ResourcePieceCut>(request.Target))
+                        {
+                            var cuts = state.EntityManager.GetComponentData<ResourcePieceCut>(request.Target);
+                            cuts.Set(selected, request.CutHeight);
+                            state.EntityManager.SetComponentData(request.Target, cuts);
+                        }
+                    }
                     if (pieces.Health[selected] <= .0001f)
                     {
                         pieces.Health[selected] = 0f;
@@ -90,9 +107,12 @@ namespace WorldBuilder.Entities.Resources.Systems
                 if (node.Health < .0001f) node.Health = 0f;
                 node.NextHitTime = elapsedTime + node.HitCooldownSeconds;
                 bool depleted = node.Health <= 0f;
-                if (brokenPiece >= 0)
+                // Player tool hits grant resources immediately, including hits that do not break a piece.
+                if (inventory && node.Health < previousHealth)
+                    CreateDrops(state.EntityManager, request.Target, node, drops, request.RequestId + 1u, true, request.RequestId, runtime);
+                if (!inventory && brokenPiece >= 0)
                     CreateDrops(state.EntityManager, request.Target, node, drops, (uint)(brokenPiece + 1), inventory, request.RequestId, runtime);
-                if (!individual && hasPieces && node.MaxHealth > 0f)
+                if (!inventory && !individual && hasPieces && node.MaxHealth > 0f)
                 {
                     byte kind = state.EntityManager.GetComponentData<ResourceNodePieces>(request.Target).Kind;
                     float3 position = state.EntityManager.GetComponentData<LocalTransform>(request.Target).Position;

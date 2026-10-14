@@ -40,6 +40,67 @@ namespace WorldBuilder.Entities.Tests
         }
 
         [Test]
+        public void Seaweed_RequiresTwoHitsAndGrantsEveryHitThenRespawnClearsCut()
+        {
+            world.SetTime(new TimeData(5d, .1f));
+            Entity target = entityManager.CreateEntity(typeof(ResourceNode), typeof(LocalTransform),
+                typeof(ResourceNodePieces), typeof(ResourcePieceState), typeof(ResourcePieceCut));
+            entityManager.SetComponentData(target, LocalTransform.Identity);
+            entityManager.SetComponentData(target, new ResourceNodePieces
+                { Kind = ResourceNodePieces.SeaweedKind, MinimumDropMultiplier = 1, MaximumDropMultiplier = 1 });
+            entityManager.SetComponentData(target, new ResourceNode
+                { Health = 45, MaxHealth = 45, AllowedMethods = HarvestMethod.Axe, RequiredToolItemId = -1, RespawnSeconds = .05f });
+            entityManager.AddBuffer<ResourceDrop>(target).Add(new ResourceDrop
+                { ItemId = 1, MinimumCount = 2, MaximumCount = 2, Probability = 1 });
+            var system = world.CreateSystem<ResourceHarvestSystem>();
+            entityManager.GetBuffer<ResourceHarvestRequest>(runtime).Add(new ResourceHarvestRequest
+                { Target = target, Method = HarvestMethod.Hand, Damage = 25, HasTargetPiece = 1, PieceIndex = 1 });
+            system.Update(world.Unmanaged);
+            Assert.That(entityManager.GetComponentData<ResourceNode>(target).Health, Is.EqualTo(45));
+            Assert.That(entityManager.GetBuffer<ResourceHarvestResult>(runtime)[0].Failure, Is.EqualTo(HarvestFailureReason.WrongMethod));
+            entityManager.GetBuffer<ResourceHarvestRequest>(runtime).Add(new ResourceHarvestRequest
+            {
+                Target = target, Method = HarvestMethod.Axe, ToolItemId = 5, Damage = 100,
+                HasTargetPiece = 1, PieceIndex = 1, HasCut = 1, CutHeight = .4f, GrantToInventory = 1, RequestId = 1
+            });
+            system.Update(world.Unmanaged);
+            var pieces = entityManager.GetComponentData<ResourcePieceState>(target);
+            for (int i = 0; i < pieces.Health.Length; i++)
+                Assert.That(pieces.Health[i], Is.EqualTo(i == 1 ? .5f : 1f));
+            Assert.That(entityManager.GetComponentData<ResourcePieceCut>(target).Get(1), Is.EqualTo(.4f).Within(1f / 255f));
+            Assert.That(entityManager.GetBuffer<ResourceDropSpawnRequest>(runtime).Length, Is.Zero);
+            Assert.That(entityManager.GetBuffer<InventoryGrantRequest>(runtime).Length, Is.EqualTo(1));
+            entityManager.GetBuffer<ResourceHarvestRequest>(runtime).Add(new ResourceHarvestRequest
+            {
+                Target = target, Method = HarvestMethod.Axe, ToolItemId = 5, Damage = 100,
+                HasTargetPiece = 1, PieceIndex = 1, HasCut = 1, CutHeight = .4f, GrantToInventory = 1, RequestId = 2
+            });
+            system.Update(world.Unmanaged);
+            Assert.That(entityManager.GetComponentData<ResourcePieceState>(target).Health[1], Is.Zero);
+            Assert.That(entityManager.GetBuffer<InventoryGrantRequest>(runtime).Length, Is.EqualTo(2));
+            for (int i = 0; i < pieces.Health.Length; i++)
+            {
+                if (i == 1) continue;
+                for (int hit = 0; hit < 2; hit++)
+                {
+                    entityManager.GetBuffer<ResourceHarvestRequest>(runtime).Add(new ResourceHarvestRequest
+                    {
+                        Target = target, Method = HarvestMethod.Axe, ToolItemId = 5, Damage = 25,
+                        HasTargetPiece = 1, PieceIndex = i, HasCut = 1, CutHeight = .3f, GrantToInventory = 1
+                    });
+                    system.Update(world.Unmanaged);
+                }
+            }
+            Assert.That(entityManager.GetBuffer<InventoryGrantRequest>(runtime).Length, Is.EqualTo(pieces.Health.Length * 2));
+            Assert.That(entityManager.GetBuffer<ResourceDropSpawnRequest>(runtime).Length, Is.Zero);
+            Assert.That(entityManager.HasComponent<Disabled>(target), Is.True);
+            world.CreateSystem<ResourceRespawnSystem>().Update(world.Unmanaged);
+            Assert.That(entityManager.HasComponent<Disabled>(target), Is.False);
+            Assert.That(entityManager.GetComponentData<ResourcePieceState>(target).Health.Length, Is.Zero);
+            Assert.That(entityManager.GetComponentData<ResourcePieceCut>(target).Height.Length, Is.Zero);
+        }
+
+        [Test]
         public void DepletingRestoredMineral_RecreatesRespawnStateAndResetsPieces()
         {
             world.SetTime(new TimeData(5d, .1f));
@@ -75,7 +136,8 @@ namespace WorldBuilder.Entities.Tests
             world.SetTime(new TimeData(5d, .1f));
             Entity target = entityManager.CreateEntity(typeof(ResourceNode), typeof(ResourceRespawnState),
                 typeof(LocalTransform), typeof(ResourceNodePieces), typeof(ResourcePieceState));
-            entityManager.SetComponentData(target, LocalTransform.Identity);
+            var transform = LocalTransform.FromPositionRotationScale(new float3(3, 4, 5), quaternion.RotateY(.7f), 2f);
+            entityManager.SetComponentData(target, transform);
             entityManager.SetComponentData(target, new ResourceNodePieces { Kind = 0, MinimumDropMultiplier = 1, MaximumDropMultiplier = 1 });
             entityManager.SetComponentData(target, new ResourceNode
             {
@@ -90,14 +152,16 @@ namespace WorldBuilder.Entities.Tests
                 entityManager.GetBuffer<ResourceHarvestRequest>(runtime).Add(new ResourceHarvestRequest
                 {
                     Target = target, Method = HarvestMethod.Pickaxe, ToolItemId = 6,
-                    Damage = 40, HasTargetPiece = 1, PieceIndex = 1, GrantToInventory = 1
+                    Damage = 40, HasTargetPiece = 1, PieceIndex = 1, GrantToInventory = 1,
+                    HasHitPoint = 1, HitPoint = transform.Position + math.rotate(transform.Rotation, new float3(1 + hit, 2, 3) * transform.Scale)
                 });
                 system.Update(world.Unmanaged);
                 var pieces = entityManager.GetComponentData<ResourcePieceState>(target);
+                Assert.That(math.distance(pieces.Impacts[1], new float3(1, 2, 3)), Is.LessThan(.0001f));
                 Assert.That(pieces.Health[0], Is.EqualTo(1));
                 Assert.That(pieces.Health[2], Is.EqualTo(1));
                 Assert.That(pieces.Health[1], Is.EqualTo(math.max(0f, 1f - .4f * (hit + 1))).Within(.0001f));
-                Assert.That(entityManager.GetBuffer<InventoryGrantRequest>(runtime).Length, Is.EqualTo(hit == 2 ? 1 : 0));
+                Assert.That(entityManager.GetBuffer<InventoryGrantRequest>(runtime).Length, Is.EqualTo(hit + 1));
                 Assert.That(entityManager.GetBuffer<ResourceDropSpawnRequest>(runtime).Length, Is.Zero);
             }
             World previous = World.DefaultGameObjectInjectionWorld;
@@ -105,10 +169,10 @@ namespace WorldBuilder.Entities.Tests
             {
                 World.DefaultGameObjectInjectionWorld = world;
                 int accepted = 0;
-                Assert.That(WorldResourceCommandQueue.ProcessInventoryTransfers((id, count) => { accepted += 1; return 1; }), Is.EqualTo(1));
-                Assert.That(accepted, Is.EqualTo(1));
+                Assert.That(WorldResourceCommandQueue.ProcessInventoryTransfers((id, count) => { accepted += 1; return 1; }), Is.EqualTo(3));
+                Assert.That(accepted, Is.EqualTo(3));
                 var drops = entityManager.GetBuffer<ResourceDropSpawnRequest>(runtime);
-                Assert.That(drops.Length, Is.EqualTo(1));
+                Assert.That(drops.Length, Is.EqualTo(3));
                 Assert.That(drops[0].Count, Is.EqualTo(1));
                 Assert.That(drops[0].ItemId, Is.EqualTo(100));
                 Assert.That(entityManager.GetBuffer<InventoryGrantResult>(runtime).Length, Is.Zero);
