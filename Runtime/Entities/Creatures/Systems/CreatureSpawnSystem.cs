@@ -70,8 +70,13 @@ namespace WorldBuilder.Entities.Creatures.Systems
                     ? state.EntityManager.GetComponentData<CreatureSwim>(prefab).BodyRadius : .5f;
                 float radius = CreatureTerrainCollision.Radius(scale, bodyRadius);
                 float3 position = request.Position;
-                bool placed = CreatureTerrainCollision.TryPlace(collisionWorld, creatures, Entity.Null,
-                    position, radius, waterSurface, out position);
+                bool nearby = (request.StateFlags & CreatureSpawnRequestFlags.FindNearbyPosition) != 0;
+                // A summon can be inside a cave. Preserve clear local water instead of casting down from above its roof.
+                bool placed = nearby && CreatureTerrainCollision.TryRecover(collisionWorld, creatures, Entity.Null,
+                    request.Position, radius, waterSurface, out position);
+                if (!placed)
+                    placed = CreatureTerrainCollision.TryPlace(collisionWorld, creatures, Entity.Null,
+                        request.Position, radius, waterSurface, out position);
                 // Zone requests can choose another candidate. Explicit positions never move sideways.
                 if (!placed && request.Owner != Entity.Null &&
                     state.EntityManager.HasComponent<CreatureSpawnZone>(request.Owner))
@@ -111,7 +116,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 if (state.EntityManager.HasComponent<CreatureSwim>(prefab))
                 {
                     CreatureSwim swim = state.EntityManager.GetComponentData<CreatureSwim>(prefab);
-                    swim.Home = (request.StateFlags & CreatureSpawnRequestFlags.ExplicitHome) != 0
+                    swim.Home = !nearby && (request.StateFlags & CreatureSpawnRequestFlags.ExplicitHome) != 0
                         ? request.Home
                         : position;
                     swim.HomeRegion = WorldEntityGridUtility.WorldToRegion(swim.Home, config.ValueRO);

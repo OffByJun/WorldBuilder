@@ -89,6 +89,50 @@ namespace WorldBuilder.Entities.Tests
             Assert.That(point.x, Is.GreaterThan(3f));
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void SummonedCreatureAppearsBelowOverheadTerrainWithRequestedTaming(bool tamed)
+        {
+            var bodies = physics.Bodies;
+            var roof = bodies[1];
+            roof.WorldFromBody = new RigidTransform(quaternion.identity, new float3(0f, 9f, 0f));
+            bodies[1] = roof;
+            physics.CollisionWorld.BuildBroadphase(ref physics, 0f, float3.zero, true);
+            var manager = entities.EntityManager;
+            Entity runtime = manager.CreateEntity(typeof(WorldEntityRuntimeConfig), typeof(CreatureWaterSurface), typeof(PhysicsWorldSingleton));
+            manager.SetComponentData(runtime, new WorldEntityRuntimeConfig { ChunkSize = 128f, ChunksPerRegion = 4 });
+            manager.SetComponentData(runtime, new CreatureWaterSurface { Height = 12f });
+            manager.SetComponentData(runtime, new PhysicsWorldSingleton { PhysicsWorld = physics });
+            manager.AddBuffer<CreatureGradeDefinition>(runtime);
+            Entity prefab = manager.CreateEntity(typeof(Prefab), typeof(Creature), typeof(LocalTransform),
+                typeof(WorldEntityIdentity), typeof(WorldEntityChunk), typeof(CreatureRandom), typeof(CreatureSwim),
+                typeof(CreatureTaming), typeof(CreatureTamed), typeof(CreatureAffinity), typeof(WorldEntityActive));
+            manager.SetComponentData(prefab, LocalTransform.Identity);
+            manager.SetComponentData(prefab, new CreatureSwim { BodyRadius = .5f });
+            manager.SetComponentData(prefab, new CreatureAffinity { MaximumValue = 100f });
+            manager.AddBuffer<WorldEntityPrefabElement>(runtime).Add(new WorldEntityPrefabElement { PrefabId = 2100, Prefab = prefab });
+            manager.AddBuffer<CreatureSpawnRequest>(runtime).Add(new CreatureSpawnRequest
+            {
+                PrefabId = 2100, Position = new float3(0f, 2f, 0f), Home = new float3(0f, 2f, 0f),
+                Rotation = quaternion.identity, Seed = 1, IsTamed = (byte)(tamed ? 1 : 0), Affinity = tamed ? 100f : 0f,
+                StateFlags = CreatureSpawnRequestFlags.ExplicitHome | CreatureSpawnRequestFlags.ExplicitTaming |
+                    CreatureSpawnRequestFlags.ExplicitAffinity | CreatureSpawnRequestFlags.FindNearbyPosition
+            });
+            bool authority = WorldSimulationAuthority.Enabled;
+            try
+            {
+                WorldSimulationAuthority.Enabled = true;
+                entities.GetOrCreateSystem<CreatureSpawnSystem>().Update(entities.Unmanaged);
+                using var query = manager.CreateEntityQuery(typeof(Creature), typeof(LocalTransform));
+                Assert.That(query.CalculateEntityCount(), Is.EqualTo(1), "A clear underwater summon must not be discarded because of a roof");
+                Entity instance = query.GetSingletonEntity();
+                Assert.That(manager.GetComponentData<LocalTransform>(instance).Position.y, Is.EqualTo(2f).Within(.01f));
+                Assert.That(manager.IsComponentEnabled<CreatureTamed>(instance), Is.EqualTo(tamed));
+                Assert.That(manager.GetComponentData<CreatureAffinity>(instance).Value, Is.EqualTo(tamed ? 100f : 0f));
+            }
+            finally { WorldSimulationAuthority.Enabled = authority; }
+        }
+
         [Test]
         public void WallCollisionStillAllowsTangentialMovement()
         {

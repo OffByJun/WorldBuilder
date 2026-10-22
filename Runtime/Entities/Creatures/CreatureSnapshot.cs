@@ -81,7 +81,7 @@ namespace WorldBuilder.Entities.Creatures
             return true;
         }
 
-        public static int Restore(IReadOnlyList<CreatureSnapshot> snapshots)
+        public static int Restore(IReadOnlyList<CreatureSnapshot> snapshots, bool findNearbyPosition = false)
         {
             if (snapshots == null || snapshots.Count == 0) return 0;
             if (!TryGetRuntime(out EntityManager entityManager, out Entity runtime) ||
@@ -92,7 +92,7 @@ namespace WorldBuilder.Entities.Creatures
             for (int i = 0; i < snapshots.Count; i++)
             {
                 CreatureSnapshot snapshot = snapshots[i];
-                requests.Add(new CreatureSpawnRequest
+                var request = new CreatureSpawnRequest
                 {
                     PrefabId = snapshot.PrefabId,
                     Owner = Entity.Null,
@@ -111,8 +111,11 @@ namespace WorldBuilder.Entities.Creatures
                                  CreatureSpawnRequestFlags.ExplicitHome |
                                  CreatureSpawnRequestFlags.ExplicitIdentity |
                                  CreatureSpawnRequestFlags.ExplicitAffinity |
-                                 CreatureSpawnRequestFlags.ExplicitTaming
-                });
+                                 CreatureSpawnRequestFlags.ExplicitTaming |
+                                 (findNearbyPosition ? CreatureSpawnRequestFlags.FindNearbyPosition : CreatureSpawnRequestFlags.None)
+                };
+                if (findNearbyPosition) requests.Insert(i, request);
+                else requests.Add(request);
             }
 
             return snapshots.Count;

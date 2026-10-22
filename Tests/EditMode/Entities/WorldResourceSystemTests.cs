@@ -131,7 +131,7 @@ namespace WorldBuilder.Entities.Tests
         }
 
         [Test]
-        public void TargetedMineral_DamagesOnlyHitPieceAndGrantsInventoryWithOverflow()
+        public void TargetedMineral_ChipsEveryHitAndBreaksTogetherAtZeroHealth()
         {
             world.SetTime(new TimeData(5d, .1f));
             Entity target = entityManager.CreateEntity(typeof(ResourceNode), typeof(ResourceRespawnState),
@@ -158,9 +158,22 @@ namespace WorldBuilder.Entities.Tests
                 system.Update(world.Unmanaged);
                 var pieces = entityManager.GetComponentData<ResourcePieceState>(target);
                 Assert.That(math.distance(pieces.Impacts[1], new float3(1, 2, 3)), Is.LessThan(.0001f));
-                Assert.That(pieces.Health[0], Is.EqualTo(1));
-                Assert.That(pieces.Health[2], Is.EqualTo(1));
-                Assert.That(pieces.Health[1], Is.EqualTo(math.max(0f, 1f - .4f * (hit + 1))).Within(.0001f));
+                Assert.That(pieces.Chips.Length, Is.EqualTo(hit + 1));
+                Assert.That(math.distance(pieces.Chips[hit].Point, new float3(1 + hit, 2, 3)), Is.LessThan(.0001f));
+                Assert.That(pieces.Chips[hit].Piece, Is.EqualTo(1));
+                Assert.That(entityManager.GetComponentData<ResourceNode>(target).Health, Is.EqualTo(math.max(0f, 100f - 40f * (hit + 1))));
+                if (hit < 2)
+                {
+                    Assert.That(entityManager.HasComponent<Disabled>(target), Is.False);
+                    Assert.That(pieces.Health[0], Is.EqualTo(1));
+                    Assert.That(pieces.Health[2], Is.EqualTo(1));
+                    Assert.That(pieces.Health[1], Is.EqualTo(1f - .4f * (hit + 1)).Within(.0001f));
+                }
+                else
+                {
+                    Assert.That(entityManager.HasComponent<Disabled>(target), Is.True);
+                    for (int piece = 0; piece < pieces.Health.Length; piece++) Assert.That(pieces.Health[piece], Is.Zero);
+                }
                 Assert.That(entityManager.GetBuffer<InventoryGrantRequest>(runtime).Length, Is.EqualTo(hit + 1));
                 Assert.That(entityManager.GetBuffer<ResourceDropSpawnRequest>(runtime).Length, Is.Zero);
             }

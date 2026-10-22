@@ -53,9 +53,9 @@ namespace WorldBuilder.Entities.Resources.Systems
                     var pieces = state.EntityManager.GetComponentData<ResourcePieceState>(request.Target);
                     byte kind = state.EntityManager.GetComponentData<ResourceNodePieces>(request.Target).Kind;
                     float3 position = state.EntityManager.GetComponentData<LocalTransform>(request.Target).Position;
-                    int seed = ResourceNodePieces.PositionSeed(position, kind);
+                    int seed = state.EntityManager.GetComponentData<ResourceNodePieces>(request.Target).GetSeed(position);
                     if (pieces.Health.Length == 0)
-                        pieces.Initialize(ResourceNodePieces.RemainingCount(kind, seed, 1f), node.Health / node.MaxHealth);
+                        pieces.Initialize(ResourceNodePieces.RemainingCount(kind, seed, 1f), kind == ResourceNodePieces.SeaweedKind ? node.Health / node.MaxHealth : 1f);
                     int selected = request.HasTargetPiece != 0 ? request.PieceIndex : pieces.Health.Length - 1;
                     if (request.HasTargetPiece == 0)
                         while (selected >= 0 && pieces.Health[selected] <= .0001f) selected--;
@@ -70,9 +70,11 @@ namespace WorldBuilder.Entities.Resources.Systems
                         var transform = state.EntityManager.GetComponentData<LocalTransform>(request.Target);
                         float3 localPoint = math.rotate(math.inverse(transform.Rotation), request.HitPoint - transform.Position) / transform.Scale;
                         pieces.SetImpact(selected, localPoint);
+                        pieces.AddChip(selected, localPoint, pieceDamage);
                     }
                     if (kind == ResourceNodePieces.SeaweedKind) pieceDamage = math.min(.5f, pieceDamage);
-                    pieces.Health[selected] = math.max(0f, pieces.Health[selected] - pieceDamage);
+                    bool mineral = kind != ResourceNodePieces.SeaweedKind;
+                    pieces.Health[selected] = math.max(mineral ? .05f : 0f, pieces.Health[selected] - pieceDamage);
                     if (kind == ResourceNodePieces.SeaweedKind && request.HasCut != 0 && pieceDamage > 0f)
                     {
                         if (state.EntityManager.HasComponent<ResourcePieceCut>(request.Target))
@@ -87,9 +89,18 @@ namespace WorldBuilder.Entities.Resources.Systems
                         pieces.Health[selected] = 0f;
                         brokenPiece = selected;
                     }
-                    float totalHealth = 0f;
-                    for (int piece = 0; piece < pieces.Health.Length; piece++) totalHealth += pieces.Health[piece];
-                    node.Health = node.MaxHealth * totalHealth / pieces.Health.Length;
+                    if (mineral)
+                    {
+                        node.Health = math.max(0f, previousHealth - damage);
+                        if (node.Health <= .0001f)
+                            for (int piece = 0; piece < pieces.Health.Length; piece++) pieces.Health[piece] = 0f;
+                    }
+                    else
+                    {
+                        float totalHealth = 0f;
+                        for (int piece = 0; piece < pieces.Health.Length; piece++) totalHealth += pieces.Health[piece];
+                        node.Health = node.MaxHealth * totalHealth / pieces.Health.Length;
+                    }
                     state.EntityManager.SetComponentData(request.Target, pieces);
                 }
                 else if (hasPieces)
@@ -98,7 +109,7 @@ namespace WorldBuilder.Entities.Resources.Systems
                     if (kind != ResourceNodePieces.SeaweedKind)
                     {
                         float3 position = state.EntityManager.GetComponentData<LocalTransform>(request.Target).Position;
-                        int seed = ResourceNodePieces.PositionSeed(position, kind);
+                        int seed = state.EntityManager.GetComponentData<ResourceNodePieces>(request.Target).GetSeed(position);
                         // Mineral health is the durability of each piece, rather than divided between all pieces.
                         damage /= ResourceNodePieces.RemainingCount(kind, seed, 1f);
                     }
@@ -112,11 +123,18 @@ namespace WorldBuilder.Entities.Resources.Systems
                     CreateDrops(state.EntityManager, request.Target, node, drops, request.RequestId + 1u, true, request.RequestId, runtime);
                 if (!inventory && brokenPiece >= 0)
                     CreateDrops(state.EntityManager, request.Target, node, drops, (uint)(brokenPiece + 1), inventory, request.RequestId, runtime);
+                if (!inventory && individual && hasPieces && depleted &&
+                    state.EntityManager.GetComponentData<ResourceNodePieces>(request.Target).Kind != ResourceNodePieces.SeaweedKind)
+                {
+                    var pieces = state.EntityManager.GetComponentData<ResourcePieceState>(request.Target);
+                    for (int piece = 0; piece < pieces.Health.Length; piece++)
+                        CreateDrops(state.EntityManager, request.Target, node, drops, (uint)(piece + 1), false, request.RequestId, runtime);
+                }
                 if (!inventory && !individual && hasPieces && node.MaxHealth > 0f)
                 {
                     byte kind = state.EntityManager.GetComponentData<ResourceNodePieces>(request.Target).Kind;
                     float3 position = state.EntityManager.GetComponentData<LocalTransform>(request.Target).Position;
-                    int seed = ResourceNodePieces.PositionSeed(position, kind);
+                    int seed = state.EntityManager.GetComponentData<ResourceNodePieces>(request.Target).GetSeed(position);
                     int before = ResourceNodePieces.RemainingCount(kind, seed, previousHealth / node.MaxHealth);
                     int after = ResourceNodePieces.RemainingCount(kind, seed, node.Health / node.MaxHealth);
                     int total = ResourceNodePieces.RemainingCount(kind, seed, 1f);

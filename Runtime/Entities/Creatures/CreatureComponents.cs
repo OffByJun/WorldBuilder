@@ -211,7 +211,8 @@ namespace WorldBuilder.Entities.Creatures
         ExplicitHome = 1 << 2,
         ExplicitIdentity = 1 << 3,
         ExplicitAffinity = 1 << 4,
-        ExplicitTaming = 1 << 5
+        ExplicitTaming = 1 << 5,
+        FindNearbyPosition = 1 << 6
     }
 
     public struct CreatureSpawnZone : IComponentData

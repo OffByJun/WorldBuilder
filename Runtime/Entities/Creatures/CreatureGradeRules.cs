@@ -40,7 +40,7 @@ namespace WorldBuilder.Entities.Creatures
             {
                 Grade = grade,
                 SpeedMultiplier = 1f + 0.2f * tier,
-                SizeMultiplier = 1f + 0.35f * tier,
+                SizeMultiplier = grade == CreatureGrade.Legendary ? 1.9f : grade == CreatureGrade.Rare ? 1.4f : 1f,
                 ValueMultiplier = 1f + 3f * tier,
                 TameChanceMultiplier = 1f - 0.35f * tier,
                 SpawnWeight = math.max(0.01f, 1f - 0.4f * GradeIndex(grade))

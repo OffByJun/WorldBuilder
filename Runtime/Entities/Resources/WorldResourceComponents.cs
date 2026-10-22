@@ -61,6 +61,11 @@ namespace WorldBuilder.Entities.Resources
         public byte Kind;
         public int MinimumDropMultiplier;
         public int MaximumDropMultiplier;
+        public int LayoutSeed;
+        public byte HasLayoutSeed;
+
+        public int GetSeed(Unity.Mathematics.float3 position)
+            => HasLayoutSeed != 0 ? LayoutSeed : PositionSeed(position, Kind);
 
         public static int PositionSeed(Unity.Mathematics.float3 position, byte kind)
         {
@@ -106,11 +111,26 @@ namespace WorldBuilder.Entities.Resources
         }
     }
 
+    public struct ResourceMineralChip
+    {
+        public float3 Point;
+        public float Damage;
+        public int Piece;
+    }
+
     public struct ResourcePieceState : IComponentData
     {
         public FixedList64Bytes<float> Health;
         public FixedList128Bytes<float3> Impacts;
         public int ImpactMask;
+        public FixedList512Bytes<ResourceMineralChip> Chips;
+
+        public void AddChip(int piece, float3 point, float damage)
+        {
+            if (damage <= 0f) return;
+            if (Chips.Length < Chips.Capacity)
+                Chips.Add(new ResourceMineralChip { Piece = piece, Point = point, Damage = damage });
+        }
 
         public void SetImpact(int piece, float3 point)
         {
@@ -134,6 +154,7 @@ namespace WorldBuilder.Entities.Resources
             Health.Clear();
             Impacts.Clear();
             ImpactMask = 0;
+            Chips.Clear();
             float available = count * Unity.Mathematics.math.saturate(healthFraction);
             for (int i = 0; i < count; i++) Health.Add(Unity.Mathematics.math.saturate(available - i));
         }
