@@ -19,8 +19,17 @@
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": false,
-    "defineConstraints": [],
-    "versionDefines": [],
+    "defineConstraints": [
+        "WORLDBUILDER_INCLUDE_TESTS",
+        "WB_TEST_FRAMEWORK_AVAILABLE"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.test-framework",
+            "expression": "1.0.0",
+            "define": "WB_TEST_FRAMEWORK_AVAILABLE"
+        }
+    ],
     "noEngineReferences": false,
     "optionalUnityReferences": [
         "TestAssemblies"
