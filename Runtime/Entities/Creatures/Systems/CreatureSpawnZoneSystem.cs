@@ -26,7 +26,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 state.EntityManager.GetBuffer<CreatureGradeDefinition>(runtime, true);
             DynamicBuffer<CreatureSpawnRequest> requests =
                 state.EntityManager.GetBuffer<CreatureSpawnRequest>(runtime);
-            var prefabs = new NativeParallelHashSet<int>(16, Allocator.Temp);
+            using var prefabs = new NativeParallelHashSet<int>(16, Allocator.Temp);
             using var prefabRates = new NativeParallelHashMap<int, float>(16, Allocator.Temp);
             if (state.EntityManager.HasBuffer<WorldEntityPrefabElement>(runtime))
             {
@@ -37,6 +37,15 @@ namespace WorldBuilder.Entities.Creatures.Systems
                         prefabRates.TryAdd(entry.PrefabId, state.EntityManager.HasComponent<WorldEntitySpawnRate>(entry.Prefab)
                             ? state.EntityManager.GetComponentData<WorldEntitySpawnRate>(entry.Prefab).Value : 1f);
                     }
+            }
+
+            if (prefabs.Count() == 0) return;
+            var pending = new NativeParallelHashMap<Entity, int>(math.max(1, requests.Length), Allocator.Temp);
+            foreach (var request in requests)
+            {
+                if (request.Owner == Entity.Null) continue;
+                pending.TryGetValue(request.Owner, out int count);
+                pending[request.Owner] = count + 1;
             }
 
             NativeParallelHashSet<int2> loaded = BuildLoadedRegions(state.EntityManager, runtime);
@@ -51,10 +60,13 @@ namespace WorldBuilder.Entities.Creatures.Systems
 
                 if (loaded.IsCreated &&
                     !loaded.Contains(WorldEntityGridUtility.WorldToRegion(center, config))) continue;
-                if (elapsed < value.NextSpawnTime || spawned.Length >= value.MaximumAlive) continue;
+                bool initial = value.InitialPopulationRequested == 0;
+                pending.TryGetValue(zoneEntity, out int queued);
+                int available = value.MaximumAlive - spawned.Length - queued;
+                if ((!initial && elapsed < value.NextSpawnTime) || available <= 0) continue;
 
                 Random random = Random.CreateFromIndex(CreatureGradeRules.SanitizeSeed(value.RandomState));
-                int count = math.min(value.SpawnPerTick, value.MaximumAlive - spawned.Length);
+                int count = initial ? available : math.min(value.SpawnPerTick, available);
                 for (int i = 0; i < count; i++)
                 {
                     if (!TrySelectPrefab(state.EntityManager, zoneEntity, value.PrefabId, prefabs, ref random, out int prefabId)) continue;
@@ -71,17 +83,19 @@ namespace WorldBuilder.Entities.Creatures.Systems
                         Rotation = quaternion.RotateY(random.NextFloat(0f, 2f * math.PI)),
                         Grade = CreatureGradeRules.SelectGrade(definitions, value.AllowedGrades, ref random),
                         Seed = random.NextUInt(),
-                        StateFlags = CreatureSpawnRequestFlags.ExplicitGrade
+                        StateFlags = CreatureSpawnRequestFlags.ExplicitGrade |
+                            (initial ? CreatureSpawnRequestFlags.InitialPopulation : CreatureSpawnRequestFlags.None)
                     });
                 }
 
                 value.RandomState = CreatureGradeRules.SanitizeSeed(random.NextUInt());
+                value.InitialPopulationRequested = 1;
                 value.NextSpawnTime = elapsed + value.SpawnInterval;
                 zone.ValueRW = value;
             }
 
             if (loaded.IsCreated) loaded.Dispose();
-            prefabs.Dispose();
+            pending.Dispose();
         }
 
         private static bool TrySelectPrefab(EntityManager manager, Entity zone, int legacyId,

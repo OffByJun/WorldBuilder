@@ -17,7 +17,7 @@ namespace WorldBuilder.Editor.PrefabBrush
     {
         private const string RootsPrefKey = "WorldBuilder.PrefabPalette.Roots";
         private const string TileSizePrefKey = "WorldBuilder.PrefabPalette.TileSize";
-        private const string DefaultRoots = "Assets/008_WorldBuilder,Assets/002_Prefabs,Assets/003_Resources/Models";
+        private const string DefaultRoots = "Assets/008_WorldBuilder,Assets/002_Prefabs,Assets/003_Art/Models";
         private const float MaxWeight = 5f;
         private const float TilePadding = 10f;
 

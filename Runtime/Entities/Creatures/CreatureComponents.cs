@@ -208,6 +208,7 @@ namespace WorldBuilder.Entities.Creatures
     {
         None = 0,
         ExplicitGrade = 1 << 0,
+        InitialPopulation = 1 << 1,
         ExplicitHome = 1 << 2,
         ExplicitIdentity = 1 << 3,
         ExplicitAffinity = 1 << 4,
@@ -225,6 +226,7 @@ namespace WorldBuilder.Entities.Creatures
         public int MaximumAlive;
         public int SpawnPerTick;
         public uint RandomState;
+        public byte InitialPopulationRequested;
     }
 
     [InternalBufferCapacity(4)]

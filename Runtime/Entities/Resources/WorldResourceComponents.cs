@@ -213,6 +213,7 @@ namespace WorldBuilder.Entities.Resources
         public int MaximumAlive;
         public int SpawnPerTick;
         public int PendingSpawnAttempts;
+        public byte InitialPopulationComplete;
         public uint RandomState;
     }
 

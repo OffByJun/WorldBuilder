@@ -50,7 +50,9 @@ namespace WorldBuilder.Entities.Creatures.Systems
             RefRW<WorldEntityRuntimeConfig> config = SystemAPI.GetSingletonRW<WorldEntityRuntimeConfig>();
             EntityCommandBuffer commands = new EntityCommandBuffer(Allocator.Temp);
 
-            int requestCount = math.min(4, requests.Length);
+            // Populate newly loaded habitats promptly, while keeping normal replenishment inexpensive.
+            int budget = (requests[0].StateFlags & CreatureSpawnRequestFlags.InitialPopulation) != 0 ? 24 : 4;
+            int requestCount = math.min(budget, requests.Length);
             for (int i = 0; i < requestCount; i++)
             {
                 CreatureSpawnRequest request = requests[i];

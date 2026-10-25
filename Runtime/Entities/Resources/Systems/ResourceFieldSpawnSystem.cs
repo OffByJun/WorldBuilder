@@ -22,11 +22,11 @@ namespace WorldBuilder.Entities.Resources.Systems
             if (!WorldBuilder.Entities.WorldSimulationAuthority.Enabled) return;
             double elapsed = SystemAPI.Time.ElapsedTime;
             bool hasDueZone = false;
+            bool preparing = false;
             foreach (RefRO<ResourceFieldSpawnZone> zone in SystemAPI.Query<RefRO<ResourceFieldSpawnZone>>())
             {
-                if (elapsed < zone.ValueRO.NextSpawnTime) continue;
-                hasDueZone = true;
-                break;
+                if (zone.ValueRO.InitialPopulationComplete == 0) preparing = true;
+                if (elapsed >= zone.ValueRO.NextSpawnTime) hasDueZone = true;
             }
             if (!hasDueZone) return;
 
@@ -36,15 +36,20 @@ namespace WorldBuilder.Entities.Resources.Systems
             Entity runtime = SystemAPI.GetSingletonEntity<WorldEntityRuntimeConfig>();
             DynamicBuffer<WorldEntityPrefabElement> prefabs =
                 state.EntityManager.GetBuffer<WorldEntityPrefabElement>(runtime, true);
+            if (prefabs.Length == 0) return;
             NativeParallelHashMap<int, Entity> prefabMap =
                 new NativeParallelHashMap<int, Entity>(math.max(1, prefabs.Length), Allocator.Temp);
             for (int i = 0; i < prefabs.Length; i++) prefabMap.TryAdd(prefabs[i].PrefabId, prefabs[i].Prefab);
             PhysicsWorldSingleton physics = SystemAPI.GetSingleton<PhysicsWorldSingleton>();
+            bool terrainReady = false;
+            foreach (var body in physics.CollisionWorld.Bodies)
+                if (state.EntityManager.HasComponent<ResourceSpawnTerrain>(body.Entity)) { terrainReady = true; break; }
+            if (!terrainReady) { prefabMap.Dispose(); return; }
             RefRW<WorldEntityRuntimeConfig> config = SystemAPI.GetSingletonRW<WorldEntityRuntimeConfig>();
             EntityCommandBuffer commands = new EntityCommandBuffer(Allocator.Temp);
             NativeList<Unity.Physics.RaycastHit> hits = new NativeList<Unity.Physics.RaycastHit>(Allocator.Temp);
             NativeList<float3> pendingPositions = new NativeList<float3>(Allocator.Temp);
-            int remainingAttempts = 4;
+            int remainingAttempts = preparing ? 64 : 4;
 
             foreach (var (zone, transform, spawned, points, zoneEntity) in
                      SystemAPI.Query<RefRW<ResourceFieldSpawnZone>, RefRO<LocalTransform>,
@@ -57,6 +62,7 @@ namespace WorldBuilder.Entities.Resources.Systems
                 if (zone.ValueRO.MaximumAlive <= spawned.Length)
                 {
                     zone.ValueRW.PendingSpawnAttempts = 0;
+                    zone.ValueRW.InitialPopulationComplete = 1;
                     zone.ValueRW.NextSpawnTime = elapsed + math.max(1f, zone.ValueRO.SpawnInterval);
                     continue;
                 }
@@ -69,7 +75,7 @@ namespace WorldBuilder.Entities.Resources.Systems
                 Random random = Random.CreateFromIndex(value.RandomState == 0 ? 1u : value.RandomState);
                 int requested = math.min(value.PendingSpawnAttempts > 0 ? value.PendingSpawnAttempts : value.SpawnPerTick,
                     value.MaximumAlive - spawned.Length);
-                int count = math.min(requested, math.min(1, remainingAttempts));
+                int count = math.min(requested, math.min(value.InitialPopulationComplete == 0 ? 8 : 1, remainingAttempts));
                 remainingAttempts -= count;
                 for (int i = 0; i < count; i++)
                 {
@@ -142,7 +148,9 @@ namespace WorldBuilder.Entities.Resources.Systems
 
                 value.RandomState = random.NextUInt();
                 value.PendingSpawnAttempts = requested - count;
-                value.NextSpawnTime = elapsed + (value.PendingSpawnAttempts > 0 ? .1f : value.SpawnInterval);
+                if (value.PendingSpawnAttempts <= 0) value.InitialPopulationComplete = 1;
+                value.NextSpawnTime = elapsed + (value.PendingSpawnAttempts > 0
+                    ? (value.InitialPopulationComplete == 0 ? 0f : .1f) : value.SpawnInterval);
                 zone.ValueRW = value;
             }
 
