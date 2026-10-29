@@ -12,6 +12,9 @@ namespace WorldBuilder.Entities.Creatures.Systems
     [UpdateBefore(typeof(WorldEntityRegionActivationSystem))]
     public partial struct CreatureSpawnSystem : ISystem
     {
+        // Game-specific natural species selection at the final collision-safe position.
+        public static System.Func<CreatureSpawnRequest, float3, int> SelectNaturalPrefab;
+
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<WorldEntityRuntimeConfig>();
@@ -94,6 +97,28 @@ namespace WorldBuilder.Entities.Creatures.Systems
                     }
                 }
                 if (!placed) continue;
+                if (request.Owner != Entity.Null && SelectNaturalPrefab != null)
+                {
+                    int selected = SelectNaturalPrefab(request, position);
+                    if (selected != request.PrefabId && prefabMap.TryGetValue(selected, out Entity selectedPrefab) &&
+                        state.EntityManager.HasComponent<Creature>(selectedPrefab))
+                    {
+                        float selectedScale = math.max(.001f,
+                            state.EntityManager.GetComponentData<LocalTransform>(selectedPrefab).Scale * definition.SizeMultiplier);
+                        float selectedBodyRadius = state.EntityManager.HasComponent<CreatureSwim>(selectedPrefab)
+                            ? state.EntityManager.GetComponentData<CreatureSwim>(selectedPrefab).BodyRadius : .5f;
+                        float selectedRadius = CreatureTerrainCollision.Radius(selectedScale, selectedBodyRadius);
+                        // Recheck habitat after local clearance for the larger body.
+                        if (CreatureTerrainCollision.TryClear(collisionWorld, creatures, Entity.Null,
+                                position, selectedRadius, waterSurface, out float3 checkedPosition) &&
+                            SelectNaturalPrefab(request, checkedPosition) == selected)
+                        {
+                            prefab = selectedPrefab;
+                            scale = selectedScale;
+                            position = checkedPosition;
+                        }
+                    }
+                }
                 Entity instance = commands.Instantiate(prefab);
                 WorldEntityIdentity identity = request.Identity;
                 if ((request.StateFlags & CreatureSpawnRequestFlags.ExplicitIdentity) == 0 || !identity.IsValid)
