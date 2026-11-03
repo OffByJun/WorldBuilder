@@ -1,6 +1,8 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
+using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 using WorldBuilder.Editor.PrefabBrush;
@@ -15,7 +17,7 @@ namespace WorldBuilder.Editor.MeshSculpt
     /// </summary>
     public sealed class MeshSculptTool : IWorldBuilderTool
     {
-        private const string SculptFolder = "Assets/008_WorldBuilder/Sculpted";
+        internal const string SculptFolder = "Assets/008_WorldBuilder/Sculpted";
         private const int ColliderRefreshEvery = 6;
 
         private static readonly Dictionary<string, (string ko, string en)> Text = new Dictionary<string, (string, string)>
@@ -49,13 +51,69 @@ namespace WorldBuilder.Editor.MeshSculpt
             { "revert", ("선택한 오브젝트를 원본 메시로", "Revert Selection To Source") },
             { "revert.tip", ("선택한 오브젝트의 메시·콜라이더를 프리팹 원본으로 되돌립니다. 조각한 복사본 파일은 남습니다.", "Reverts the selected objects' mesh and collider to the prefab source. The sculpted copy asset stays.") },
             { "shortcuts", ("Ctrl 반대로 · Shift 부드럽게 · [ ] 반경 · Alt 카메라", "Ctrl invert · Shift smooth · [ ] radius · Alt camera") },
-            { "scope", ("클릭한 오브젝트와 같은 루트(예: Map) 아래의 메시만 수정합니다.", "Only meshes under the same root as the clicked object (e.g. Map) are changed.") }
+            { "scope", ("클릭한 오브젝트와 같은 루트(예: Map) 아래의 메시만 수정합니다.", "Only meshes under the same root as the clicked object (e.g. Map) are changed.") },
+            { "brush.Grab", ("잡아 끌기", "Grab") },
+            { "brush.SnakeHook", ("늘려 뽑기", "Snake Hook") },
+            { "brush.Pinch", ("모으기", "Pinch") },
+            { "brush.Crease", ("능선 긋기", "Crease") },
+            { "brush.Noise", ("거칠게", "Noise") },
+            { "brush.Terrace", ("계단", "Terrace") },
+            { "hint.Grab", ("누른 자리를 잡고 끄는 대로 옮깁니다. 화면과 나란한 면을 따라 움직여서, 옆에서 보고 끌면 솟고 위에서 보고 끌면 옆으로 밀립니다.", "Grabs the area under the cursor and moves it with the mouse, in the plane facing the camera.") },
+            { "hint.SnakeHook", ("끄는 대로 지형을 계속 늘려 뽑습니다. 봉우리·기둥·튀어나온 바위를 길게 끌어낼 때 씁니다. 브러시 아래는 계속 잘게 나뉩니다.", "Keeps pulling the surface along the stroke to draw out spires, pillars and overhangs.") },
+            { "hint.Pinch", ("브러시 가운데로 모아 능선과 골을 날카롭게 합니다. Ctrl을 누르면 벌립니다.", "Pulls toward the brush centre to sharpen ridges and creases. Hold Ctrl to spread.") },
+            { "hint.Crease", ("모으면서 올려 날카로운 능선을 긋습니다. Ctrl을 누르면 골짜기를 팝니다.", "Pinches and lifts to draw a sharp ridge. Hold Ctrl to cut a valley.") },
+            { "hint.Noise", ("울퉁불퉁한 결을 더합니다. 결 크기로 자갈·바위·언덕 느낌을 고릅니다.", "Adds rough, rocky detail. Noise size picks pebbles, rocks or hills.") },
+            { "hint.Terrace", ("계단 높이마다 평평한 단과 가파른 벽을 만듭니다(층진 절벽·계단식 비탈).", "Steps the surface into flat ledges and steep risers.") },
+            { "card.options", ("브러시 모양", "Brush Shape") },
+            { "falloff", ("가장자리", "Falloff") },
+            { "falloff.Smooth", ("부드럽게", "Smooth") },
+            { "falloff.Sphere", ("둥글게", "Sphere") },
+            { "falloff.Sharp", ("뾰족하게", "Sharp") },
+            { "falloff.Linear", ("곧게", "Linear") },
+            { "falloff.Constant", ("일정하게", "Constant") },
+            { "noiseScale", ("결 크기 (m)", "Noise Size (m)") },
+            { "terraceStep", ("계단 높이 (m)", "Step Height (m)") },
+            { "card.symmetry", ("대칭", "Symmetry") },
+            { "mirrorX", ("X 대칭", "Mirror X") },
+            { "mirrorZ", ("Z 대칭", "Mirror Z") },
+            { "pivot", ("대칭 중심", "Pivot") },
+            { "pivot.selection", ("선택한 오브젝트 위치로", "Use Selection") },
+            { "symmetry.tip", ("켜면 대칭 중심을 지나는 면의 반대쪽도 같이 조각합니다.", "Also sculpts the mirrored side across the pivot.") },
+            { "card.create", ("새 지형 만들기", "New Terrain") },
+            { "create.shape", ("모양", "Shape") },
+            { "shape.Flat", ("평지", "Flat") },
+            { "shape.Hill", ("언덕", "Hill") },
+            { "shape.Island", ("섬", "Island") },
+            { "shape.Basin", ("분지", "Basin") },
+            { "shape.Ridges", ("산맥", "Ridges") },
+            { "create.size", ("크기 (m)", "Size (m)") },
+            { "create.spacing", ("정점 간격 (m)", "Vertex Spacing (m)") },
+            { "create.height", ("높이 (m)", "Height (m)") },
+            { "create.seed", ("모양 번호", "Seed") },
+            { "create.material", ("재질", "Material") },
+            { "create.parent", ("넣을 곳", "Parent") },
+            { "create.parent.tip", ("조각은 클릭한 오브젝트와 같은 루트 아래만 고칩니다. 맵과 이어서 다듬으려면 맵 루트를 고르세요. 비우면 장면 맨 위에 만듭니다.", "Strokes only change meshes under the clicked root; pick the map root to sculpt across both.") },
+            { "create.parentSelection", ("선택한 것의 루트로", "Use Selection Root") },
+            { "create.button", ("씬 뷰 가운데에 만들기", "Create At Scene View Centre") },
+            { "create.hint", ("만든 지형은 바로 조각할 수 있습니다. 가장자리는 높이 0으로 내려앉아 주변 바닥과 잇기 쉽습니다. 재질을 비우면 넣을 곳 아래 메시의 재질을 씁니다.", "The new patch is ready to sculpt; its rim settles to height 0 so it blends into the ground.") }
         };
 
         private static readonly SculptBrush[] Brushes =
         {
             SculptBrush.Raise, SculptBrush.Dig, SculptBrush.Smooth,
-            SculptBrush.Flatten, SculptBrush.Inflate, SculptBrush.Hole
+            SculptBrush.Flatten, SculptBrush.Inflate, SculptBrush.Hole,
+            SculptBrush.Grab, SculptBrush.SnakeHook, SculptBrush.Pinch,
+            SculptBrush.Crease, SculptBrush.Noise, SculptBrush.Terrace
+        };
+
+        private static readonly SculptFalloff[] Falloffs =
+        {
+            SculptFalloff.Smooth, SculptFalloff.Sphere, SculptFalloff.Sharp, SculptFalloff.Linear, SculptFalloff.Constant
+        };
+
+        private static readonly SculptTerrainShape[] Shapes =
+        {
+            SculptTerrainShape.Flat, SculptTerrainShape.Hill, SculptTerrainShape.Island, SculptTerrainShape.Basin, SculptTerrainShape.Ridges
         };
 
         private readonly Dictionary<MeshFilter, SculptMesh> meshes = new Dictionary<MeshFilter, SculptMesh>();
@@ -68,8 +126,27 @@ namespace WorldBuilder.Editor.MeshSculpt
         private bool autoDetail = true;
         private float detail = 0.8f;
         private bool worldUp = true;
+        private SculptFalloff falloff = SculptFalloff.Smooth;
+        private float noiseScale = 3f;
+        private float terraceStep = 2f;
+        private bool mirrorX;
+        private bool mirrorZ;
+        private Vector3 mirrorPivot;
+
+        private SculptTerrainShape newShape = SculptTerrainShape.Island;
+        private float newSize = 80f;
+        private float newSpacing = 1f;
+        private float newHeight = 12f;
+        private int newSeed;
+        private Material newMaterial;
+        private Transform newParent;
 
         private bool stroking;
+        private SculptBrush strokeBrush;
+        private Plane dragPlane;
+        private Vector3 dragOrigin;
+        private Vector3 lastDragPoint;
+        private readonly List<(SculptMesh mesh, int handle, int mirror)> grabbed = new List<(SculptMesh, int, int)>();
         private int undoGroup;
         private int dabsSinceCollider;
         private Vector3 lastDab;
@@ -107,7 +184,7 @@ namespace WorldBuilder.Editor.MeshSculpt
             root.Add(InspectorHelp.Build(ToolName, "help.meshSculpt"));
 
             brushButtons.Clear();
-            for (int row = 0; row < 2; row++)
+            for (int row = 0; row < Brushes.Length / 3; row++)
             {
                 VisualElement modes = new VisualElement();
                 modes.AddToClassList("pb-mode");
@@ -143,6 +220,8 @@ namespace WorldBuilder.Editor.MeshSculpt
             upToggle.RegisterValueChangedCallback(evt => worldUp = evt.newValue);
             brushCard.Add(upToggle);
             root.Add(brushCard);
+            root.Add(BuildOptionsCard());
+            root.Add(BuildSymmetryCard());
 
             VisualElement detailCard = PrefabBrushUI.Card(T("card.detail"));
             Slider detailSlider = new Slider(T("detail"), 0.15f, 4f) { value = detail, showInputField = true };
@@ -180,9 +259,101 @@ namespace WorldBuilder.Editor.MeshSculpt
                 none.style.display = count == 0 ? DisplayStyle.Flex : DisplayStyle.None;
             }).Every(500);
             root.Add(targetsCard);
+            root.Add(BuildCreateCard());
 
             SelectBrush(brush);
             return root;
+        }
+
+        private Slider noiseSlider;
+        private Slider terraceSlider;
+
+        private VisualElement BuildOptionsCard()
+        {
+            VisualElement card = PrefabBrushUI.Card(T("card.options"));
+            var falloffField = new DropdownField(T("falloff"), Falloffs.Select(f => T("falloff." + f)).ToList(), System.Array.IndexOf(Falloffs, falloff));
+            falloffField.RegisterValueChangedCallback(_ => falloff = Falloffs[Mathf.Max(0, falloffField.index)]);
+            card.Add(falloffField);
+            noiseSlider = new Slider(T("noiseScale"), 0.3f, 30f) { value = noiseScale, showInputField = true };
+            noiseSlider.RegisterValueChangedCallback(evt => noiseScale = evt.newValue);
+            card.Add(noiseSlider);
+            terraceSlider = new Slider(T("terraceStep"), 0.2f, 20f) { value = terraceStep, showInputField = true };
+            terraceSlider.RegisterValueChangedCallback(evt => terraceStep = evt.newValue);
+            card.Add(terraceSlider);
+            return card;
+        }
+
+        private VisualElement BuildSymmetryCard()
+        {
+            VisualElement card = PrefabBrushUI.Card(T("card.symmetry"));
+            card.Add(PrefabBrushUI.Hint(T("symmetry.tip")));
+            var x = new Toggle(T("mirrorX")) { value = mirrorX };
+            x.RegisterValueChangedCallback(evt => mirrorX = evt.newValue);
+            var z = new Toggle(T("mirrorZ")) { value = mirrorZ };
+            z.RegisterValueChangedCallback(evt => mirrorZ = evt.newValue);
+            card.Add(x);
+            card.Add(z);
+            var pivot = new Vector3Field(T("pivot")) { value = mirrorPivot };
+            pivot.RegisterValueChangedCallback(evt => mirrorPivot = evt.newValue);
+            card.Add(pivot);
+            card.Add(PrefabBrushUI.Row(PrefabBrushUI.Button(T("pivot.selection"), () =>
+            {
+                if (Selection.activeTransform) pivot.value = Selection.activeTransform.position;
+            })));
+            return card;
+        }
+
+        private VisualElement BuildCreateCard()
+        {
+            VisualElement card = PrefabBrushUI.Card(T("card.create"));
+            card.Add(PrefabBrushUI.Hint(T("create.hint")));
+            var shape = new DropdownField(T("create.shape"), Shapes.Select(s => T("shape." + s)).ToList(), System.Array.IndexOf(Shapes, newShape));
+            shape.RegisterValueChangedCallback(_ => newShape = Shapes[Mathf.Max(0, shape.index)]);
+            card.Add(shape);
+            var size = new Slider(T("create.size"), 10f, 400f) { value = newSize, showInputField = true };
+            size.RegisterValueChangedCallback(evt => newSize = evt.newValue);
+            card.Add(size);
+            var spacing = new Slider(T("create.spacing"), 0.25f, 8f) { value = newSpacing, showInputField = true };
+            spacing.RegisterValueChangedCallback(evt => newSpacing = evt.newValue);
+            card.Add(spacing);
+            var height = new Slider(T("create.height"), 0f, 120f) { value = newHeight, showInputField = true };
+            height.RegisterValueChangedCallback(evt => newHeight = evt.newValue);
+            card.Add(height);
+            var seed = new IntegerField(T("create.seed")) { value = newSeed };
+            seed.RegisterValueChangedCallback(evt => newSeed = evt.newValue);
+            card.Add(seed);
+            var material = new ObjectField(T("create.material")) { objectType = typeof(Material), allowSceneObjects = false, value = newMaterial };
+            material.RegisterValueChangedCallback(evt => newMaterial = evt.newValue as Material);
+            card.Add(material);
+            if (!newParent && Selection.activeTransform) newParent = Selection.activeTransform.root;
+            var parent = new ObjectField(T("create.parent")) { objectType = typeof(Transform), allowSceneObjects = true, value = newParent, tooltip = T("create.parent.tip") };
+            parent.RegisterValueChangedCallback(evt => newParent = evt.newValue as Transform);
+            card.Add(parent);
+            card.Add(PrefabBrushUI.Row(
+                PrefabBrushUI.Button(T("create.parentSelection"), () =>
+                {
+                    if (Selection.activeTransform) parent.value = Selection.activeTransform.root;
+                }),
+                PrefabBrushUI.Button(T("create.button"), CreateTerrain, "primary")));
+            return card;
+        }
+
+        private void CreateTerrain()
+        {
+            SceneView view = SceneView.lastActiveSceneView;
+            GameObject created = SculptTerrainFactory.Create(new SculptTerrainSettings
+            {
+                Size = newSize,
+                Spacing = newSpacing,
+                Shape = newShape,
+                Height = newHeight,
+                Seed = newSeed,
+                Material = newMaterial,
+                Parent = newParent,
+                Center = view ? view.pivot : Vector3.zero
+            });
+            Selection.activeGameObject = created;
+            UndoHistory.Push("Create Sculpt Terrain");
         }
 
         private void SelectBrush(SculptBrush value)
@@ -191,6 +362,8 @@ namespace WorldBuilder.Editor.MeshSculpt
             foreach (Button button in brushButtons)
                 button.EnableInClassList("pb-mode__button--active", (SculptBrush)button.userData == value);
             if (hintLabel != null) hintLabel.text = T("hint." + value);
+            noiseSlider?.SetEnabled(value == SculptBrush.Noise);
+            terraceSlider?.SetEnabled(value == SculptBrush.Terrace);
         }
 
         // ------------------------------------------------------------------ scene
@@ -207,6 +380,25 @@ namespace WorldBuilder.Editor.MeshSculpt
                 e.Use();
             }
 
+            // 잡아 끌기·늘려 뽑기는 끄는 동안 메시가 커서 밑에서 움직이므로, 메시 대신 화면과 나란한 면에 커서를 비춘다.
+            if (stroking && IsDragBrush(strokeBrush))
+            {
+                if (e.type == EventType.MouseDrag && e.button == 0)
+                {
+                    if (TryDragPoint(e.mousePosition, out Vector3 point)) Drag(point);
+                    e.Use();
+                }
+                else if (e.type == EventType.MouseUp && e.button == 0)
+                {
+                    EndStroke();
+                    e.Use();
+                }
+
+                DrawDragCursor();
+                SceneView.RepaintAll();
+                return;
+            }
+
             if (!SceneRaycaster.TryRaycast(e.mousePosition, out RaycastHit hit))
             {
                 if (e.type == EventType.MouseUp && stroking) EndStroke();
@@ -220,8 +412,9 @@ namespace WorldBuilder.Editor.MeshSculpt
             if (e.alt) return;
             if (e.type == EventType.MouseDown && e.button == 0)
             {
-                BeginStroke(hit);
-                Dab(hit, active, e.control);
+                BeginStroke(hit, active);
+                if (IsDragBrush(active)) BeginDrag(hit);
+                else Dab(hit, active, e.control);
                 e.Use();
             }
             else if (e.type == EventType.MouseDrag && e.button == 0 && stroking)
@@ -236,6 +429,8 @@ namespace WorldBuilder.Editor.MeshSculpt
             }
         }
 
+        private static bool IsDragBrush(SculptBrush value) => value == SculptBrush.Grab || value == SculptBrush.SnakeHook;
+
         private void DrawCursor(RaycastHit hit, SculptBrush active, bool invert)
         {
             Color color = active switch
@@ -245,26 +440,77 @@ namespace WorldBuilder.Editor.MeshSculpt
                 SculptBrush.Smooth => new Color(0.6f, 1f, 0.6f),
                 SculptBrush.Flatten => new Color(1f, 0.9f, 0.4f),
                 SculptBrush.Inflate => new Color(0.85f, 0.6f, 1f),
+                SculptBrush.Grab or SculptBrush.SnakeHook => new Color(1f, 1f, 1f),
+                SculptBrush.Pinch or SculptBrush.Crease => new Color(1f, 0.7f, 0.85f),
+                SculptBrush.Noise => new Color(0.75f, 0.65f, 0.5f),
+                SculptBrush.Terrace => new Color(0.55f, 0.8f, 0.55f),
                 _ => new Color(1f, 0.3f, 0.3f)
             };
-            Handles.color = color;
-            Handles.DrawWireDisc(hit.point, hit.normal, radius, 2f);
-            Handles.color = new Color(color.r, color.g, color.b, 0.45f);
-            Handles.DrawWireDisc(hit.point, hit.normal, Mathf.Max(0.05f, radius * hardness));
-            Vector3 dir = worldUp ? Vector3.up : hit.normal;
-            if (active == SculptBrush.Raise || active == SculptBrush.Dig)
+            for (int m = 0; m < 4; m++)
             {
-                float sign = (active == SculptBrush.Raise) != invert ? 1f : -1f;
+                if (!UsesMirror(m)) continue;
+                Vector3 point = MirrorPoint(hit.point, m), normal = MirrorVector(hit.normal, m);
+                float alpha = m == 0 ? 1f : 0.45f;
+                Handles.color = new Color(color.r, color.g, color.b, alpha);
+                Handles.DrawWireDisc(point, normal, radius, 2f);
+                Handles.color = new Color(color.r, color.g, color.b, 0.45f * alpha);
+                Handles.DrawWireDisc(point, normal, Mathf.Max(0.05f, radius * hardness));
+            }
+
+            Vector3 dir = worldUp ? Vector3.up : hit.normal;
+            if (active == SculptBrush.Raise || active == SculptBrush.Dig || active == SculptBrush.Crease)
+            {
+                float sign = (active == SculptBrush.Dig) == invert ? 1f : -1f;
+                Handles.color = color;
                 Handles.DrawLine(hit.point, hit.point + dir * (radius * 0.35f * sign), 2f);
             }
         }
 
+        private void DrawDragCursor()
+        {
+            Handles.color = Color.white;
+            Handles.DrawWireDisc(lastDragPoint, dragPlane.normal, radius, 2f);
+            if (strokeBrush == SculptBrush.Grab) Handles.DrawDottedLine(dragOrigin, lastDragPoint, 4f);
+        }
+
+        // ------------------------------------------------------------------ symmetry
+
+        // 거울 번호: 0 원래, 1 X, 2 Z, 3 X와 Z.
+        private bool UsesMirror(int mirror) =>
+            mirror == 0 || (mirror == 1 && mirrorX) || (mirror == 2 && mirrorZ) || (mirror == 3 && mirrorX && mirrorZ);
+
+        private Vector3 MirrorPoint(Vector3 point, int mirror)
+        {
+            if ((mirror & 1) != 0) point.x = 2f * mirrorPivot.x - point.x;
+            if ((mirror & 2) != 0) point.z = 2f * mirrorPivot.z - point.z;
+            return point;
+        }
+
+        private static Vector3 MirrorVector(Vector3 vector, int mirror)
+        {
+            if ((mirror & 1) != 0) vector.x = -vector.x;
+            if ((mirror & 2) != 0) vector.z = -vector.z;
+            return vector;
+        }
+
+        private SculptDab Mirror(SculptDab dab, int mirror)
+        {
+            dab.Center = MirrorPoint(dab.Center, mirror);
+            dab.Direction = MirrorVector(dab.Direction, mirror);
+            dab.PlanePoint = MirrorPoint(dab.PlanePoint, mirror);
+            dab.PlaneNormal = MirrorVector(dab.PlaneNormal, mirror);
+            dab.Pull = MirrorVector(dab.Pull, mirror);
+            return dab;
+        }
+
         // ------------------------------------------------------------------ strokes
 
-        private void BeginStroke(RaycastHit hit)
+        private void BeginStroke(RaycastHit hit, SculptBrush active)
         {
             stroking = true;
+            strokeBrush = active;
             strokeTouched.Clear();
+            grabbed.Clear();
             dabsSinceCollider = 0;
             Undo.IncrementCurrentGroup();
             undoGroup = Undo.GetCurrentGroup();
@@ -274,23 +520,46 @@ namespace WorldBuilder.Editor.MeshSculpt
             strokeCandidates = hit.collider.transform.root.GetComponentsInChildren<MeshFilter>();
         }
 
+        private SculptDab NewDab(Vector3 center, Vector3 normal, SculptBrush active, bool invert) => new SculptDab
+        {
+            Center = center,
+            Direction = worldUp ? Vector3.up : normal,
+            Radius = radius,
+            Strength = strength,
+            Hardness = hardness,
+            Detail = autoDetail && active != SculptBrush.Smooth && active != SculptBrush.Hole ? detail : 0f,
+            Invert = invert,
+            PlanePoint = planePoint,
+            PlaneNormal = planeNormal,
+            Falloff = falloff,
+            NoiseScale = noiseScale,
+            TerraceStep = terraceStep
+        };
+
         private void Dab(RaycastHit hit, SculptBrush active, bool invert)
         {
             lastDab = hit.point;
-            var dab = new SculptDab
-            {
-                Center = hit.point,
-                Direction = worldUp ? Vector3.up : hit.normal,
-                Radius = radius,
-                Strength = strength,
-                Hardness = hardness,
-                Detail = autoDetail && active != SculptBrush.Smooth && active != SculptBrush.Hole ? detail : 0f,
-                Invert = invert,
-                PlanePoint = planePoint,
-                PlaneNormal = planeNormal
-            };
+            ApplyMirrored(active, NewDab(hit.point, hit.normal, active, invert));
+        }
 
-            var sphere = new Bounds(hit.point, Vector3.one * radius * 2f);
+        /// <summary>한 번 찍기를 대칭 자리마다 브러시 구 안의 메시에 적용한다.</summary>
+        private void ApplyMirrored(SculptBrush active, SculptDab dab)
+        {
+            for (int m = 0; m < 4; m++)
+            {
+                if (!UsesMirror(m)) continue;
+                SculptDab mirrored = Mirror(dab, m);
+                foreach (SculptMesh mesh in MeshesNear(mirrored.Center))
+                    if (mesh.Apply(active, mirrored)) mesh.Upload(false);
+            }
+
+            RefreshCollidersNow(false);
+        }
+
+        /// <summary>브러시 구에 걸친 편집용 메시들. 처음 걸린 메시는 되돌리기에 등록한다.</summary>
+        private IEnumerable<SculptMesh> MeshesNear(Vector3 center)
+        {
+            var sphere = new Bounds(center, Vector3.one * radius * 2f);
             foreach (MeshFilter filter in strokeCandidates)
             {
                 if (filter == null || filter.sharedMesh == null) continue;
@@ -299,14 +568,68 @@ namespace WorldBuilder.Editor.MeshSculpt
                 SculptMesh mesh = Editable(filter);
                 if (mesh == null) continue;
                 if (strokeTouched.Add(mesh)) Undo.RegisterCompleteObjectUndo(mesh.Mesh, "Mesh Sculpt");
-                if (mesh.Apply(active, dab)) mesh.Upload(false);
+                yield return mesh;
+            }
+        }
+
+        private void RefreshCollidersNow(bool force)
+        {
+            if (!force && ++dabsSinceCollider < ColliderRefreshEvery) return;
+            dabsSinceCollider = 0;
+            foreach (SculptMesh mesh in strokeTouched) RefreshCollider(mesh.Filter);
+        }
+
+        private void BeginDrag(RaycastHit hit)
+        {
+            Camera camera = SceneView.currentDrawingSceneView ? SceneView.currentDrawingSceneView.camera : SceneView.lastActiveSceneView.camera;
+            dragPlane = new Plane(-camera.transform.forward, hit.point);
+            dragOrigin = lastDragPoint = lastDab = hit.point;
+            if (strokeBrush != SculptBrush.Grab) return;
+
+            SculptDab dab = NewDab(hit.point, hit.normal, strokeBrush, false);
+            for (int m = 0; m < 4; m++)
+            {
+                if (!UsesMirror(m)) continue;
+                SculptDab mirrored = Mirror(dab, m);
+                foreach (SculptMesh mesh in MeshesNear(mirrored.Center).ToList())
+                {
+                    grabbed.Add((mesh, mesh.BeginGrab(mirrored), m));
+                    mesh.Upload(false);
+                }
+            }
+        }
+
+        private bool TryDragPoint(Vector2 mouse, out Vector3 point)
+        {
+            Ray ray = HandleUtility.GUIPointToWorldRay(mouse);
+            point = default;
+            if (!dragPlane.Raycast(ray, out float distance)) return false;
+            point = ray.GetPoint(distance);
+            return true;
+        }
+
+        private void Drag(Vector3 point)
+        {
+            if (strokeBrush == SculptBrush.Grab)
+            {
+                lastDragPoint = point;
+                Vector3 offset = point - dragOrigin;
+                var moved = new HashSet<SculptMesh>();
+                foreach ((SculptMesh mesh, int handle, int mirror) in grabbed)
+                    if (mesh.Grab(handle, MirrorVector(offset, mirror))) moved.Add(mesh);
+                foreach (SculptMesh mesh in moved) mesh.Upload(false);
+                RefreshCollidersNow(false);
+                return;
             }
 
-            if (++dabsSinceCollider >= ColliderRefreshEvery)
-            {
-                dabsSinceCollider = 0;
-                foreach (SculptMesh mesh in strokeTouched) RefreshCollider(mesh.Filter);
-            }
+            // 늘려 뽑기: 지난 자리의 표면을 이번 자리까지 끌어오고, 면을 커서와 함께 옮겨 계속 뽑는다.
+            Vector3 pull = point - lastDragPoint;
+            if (pull.magnitude < radius * 0.12f) return;
+            SculptDab dab = NewDab(lastDragPoint, dragPlane.normal, SculptBrush.SnakeHook, false);
+            dab.Pull = pull;
+            ApplyMirrored(SculptBrush.SnakeHook, dab);
+            lastDragPoint = point;
+            dragPlane = new Plane(dragPlane.normal, point);
         }
 
         private void EndStroke()
@@ -314,6 +637,7 @@ namespace WorldBuilder.Editor.MeshSculpt
             stroking = false;
             foreach (SculptMesh mesh in strokeTouched)
             {
+                mesh.EndGrab();
                 mesh.Upload(true);
                 RefreshCollider(mesh.Filter);
                 EditorUtility.SetDirty(mesh.Mesh);
@@ -327,6 +651,7 @@ namespace WorldBuilder.Editor.MeshSculpt
             }
 
             strokeTouched.Clear();
+            grabbed.Clear();
         }
 
         /// <summary>The working copy for a filter, making the saved editable mesh on first use.</summary>
@@ -391,7 +716,7 @@ namespace WorldBuilder.Editor.MeshSculpt
             collider.sharedMesh = filter.sharedMesh;
         }
 
-        private static void EnsureFolder(string path)
+        internal static void EnsureFolder(string path)
         {
             if (AssetDatabase.IsValidFolder(path)) return;
             string parent = System.IO.Path.GetDirectoryName(path)?.Replace('\\', '/');

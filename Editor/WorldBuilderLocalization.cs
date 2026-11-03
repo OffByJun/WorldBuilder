@@ -82,7 +82,7 @@ namespace WorldBuilder.Editor
             { "help.title", "사용법" },
             { "help.meshEdit", "MeshFilter를 지정한 뒤 씬에서 정점을 드래그해 편집합니다. Shift+드래그로 박스 선택, 선택된 정점은 그룹으로 함께 이동합니다." },
             { "help.prefabBrush", "프리팹 목록을 채우고 씬을 클릭/드래그하면 브러시 반경 안에 프리팹을 분산 배치합니다. Erase 모드는 반경 내 프리팹 인스턴스를 삭제합니다." },
-            { "help.meshSculpt", "이미 배치된 맵 메시를 Blender 조각처럼 다듬습니다. 브러시를 고르고 씬에서 클릭·드래그하세요. 브러시 아래는 자동으로 잘게 나뉘고, 처음 수정할 때 편집용 복사본(Assets/008_WorldBuilder/Sculpted)이 만들어져 원본 모델은 바뀌지 않습니다. Ctrl+Z로 되돌릴 수 있습니다." },
+            { "help.meshSculpt", "맵 메시를 Blender 조각처럼 다듬거나 새 지형을 만듭니다. 브러시를 고르고 씬에서 클릭·드래그하세요(잡아 끌기·늘려 뽑기는 누른 채 끌기). 브러시 아래는 자동으로 잘게 나뉘고, 처음 수정할 때 편집용 복사본(Assets/008_WorldBuilder/Sculpted)이 만들어져 원본 모델은 바뀌지 않습니다. 대칭을 켜면 반대쪽도 같이 조각됩니다. 아래 '새 지형 만들기'로 언덕·섬·분지·산맥 조각을 바로 깔 수 있습니다. Ctrl+Z로 되돌릴 수 있습니다." },
             { "help.terrainPaint", "MeshRenderer를 지정하고 씬을 칠하면 정점 컬러를 브러시로 섞습니다. 반경/강도/색을 조절하세요." },
             { "help.biomeSetter", "바이옴과 청크 크기를 정한 뒤 씬을 클릭해 청크에 바이옴을 지정합니다. Erase 모드는 지정을 해제합니다." },
             { "help.spawnEdit", "ISpawner 프리팹을 지정하고 씬을 클릭해 스포너를 배치합니다. Remove 모드는 임계 거리 내 가장 가까운 스포너를 제거합니다." },

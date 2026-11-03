@@ -11,7 +11,23 @@ namespace WorldBuilder.Editor.MeshSculpt
         Smooth,
         Flatten,
         Inflate,
-        Hole
+        Hole,
+        Grab,       // 누른 자리를 잡고 끄는 대로 옮긴다(손을 뗄 때까지 같은 정점)
+        SnakeHook,  // 끄는 대로 계속 늘려 뽑는다(브러시 아래를 계속 잘게 나눈다)
+        Pinch,      // 브러시 가운데로 모아 능선·골을 날카롭게
+        Crease,     // 모으면서 올려 능선을 긋는다(반대로는 골)
+        Noise,      // 울퉁불퉁한 바위·모래 결
+        Terrace     // 일정한 높이마다 계단
+    }
+
+    /// <summary>브러시 가운데에서 가장자리로 갈 때 세기가 줄어드는 모양.</summary>
+    internal enum SculptFalloff
+    {
+        Smooth,
+        Sphere,
+        Sharp,
+        Linear,
+        Constant
     }
 
     internal struct SculptDab
@@ -25,6 +41,10 @@ namespace WorldBuilder.Editor.MeshSculpt
         public bool Invert;
         public Vector3 PlanePoint;  // flatten target, world space
         public Vector3 PlaneNormal;
+        public SculptFalloff Falloff;
+        public Vector3 Pull;        // snake hook: how far the cursor moved since the last dab, world space
+        public float NoiseScale;    // metres per noise bump
+        public float TerraceStep;   // metres per step
     }
 
     /// <summary>
@@ -52,6 +72,7 @@ namespace WorldBuilder.Editor.MeshSculpt
         private readonly Dictionary<long, List<int>> edgeTriangles = new Dictionary<long, List<int>>();
         private readonly int submeshCount;
         private readonly bool hasTangents;
+        private readonly List<List<(int id, float weight, Vector3 origin)>> grabs = new List<List<(int, float, Vector3)>>();
         private int uploadedVertexCount;
 
         public int VertexCount => vertices.Count;
@@ -238,19 +259,9 @@ namespace WorldBuilder.Editor.MeshSculpt
             if (brush == SculptBrush.Hole) return Punch(center, radius);
             if (dab.Detail > 0f) Subdivide(center, radius, dab.Detail / scale);
 
-            // Welded groups inside the brush and how strongly each is affected.
-            var affected = new List<(int id, float weight)>();
-            float inner = radius * Mathf.Clamp01(dab.Hardness) * 0.95f;
-            for (int id = 0; id < weldVertices.Count; id++)
-            {
-                if (weldVertices[id].Count == 0) continue;
-                float distance = (WeldPosition(id) - center).magnitude;
-                if (distance >= radius) continue;
-                float t = distance <= inner ? 1f : 1f - (distance - inner) / (radius - inner);
-                float weight = t * t * (3f - 2f * t);
-                if (brush == SculptBrush.Dig) weight = Mathf.Pow(weight, 2.2f);
-                affected.Add((id, weight));
-            }
+            List<(int id, float weight)> affected = Collect(center, radius, dab.Hardness, dab.Falloff);
+            if (brush == SculptBrush.Dig)
+                for (int i = 0; i < affected.Count; i++) affected[i] = (affected[i].id, Mathf.Pow(affected[i].weight, 2.2f));
 
             if (affected.Count == 0) return false;
 
@@ -260,6 +271,45 @@ namespace WorldBuilder.Editor.MeshSculpt
 
             switch (brush)
             {
+                case SculptBrush.SnakeHook:
+                {
+                    Vector3 pull = toLocal.MultiplyVector(dab.Pull);
+                    foreach ((int id, float w) in affected) MoveWeld(id, pull * w);
+                    break;
+                }
+                case SculptBrush.Pinch:
+                    Pinch(affected, center, direction, Mathf.Clamp01(dab.Strength * 0.35f) * sign);
+                    break;
+                case SculptBrush.Crease:
+                    Pinch(affected, center, direction, Mathf.Clamp01(dab.Strength * 0.25f));
+                    foreach ((int id, float w) in affected) MoveWeld(id, direction * (sign * amount * 0.7f * w * w / scale));
+                    break;
+                case SculptBrush.Noise:
+                {
+                    float size = Mathf.Max(0.1f, dab.NoiseScale);
+                    foreach ((int id, float w) in affected)
+                    {
+                        Vector3 world = toWorld.MultiplyPoint3x4(WeldPosition(id));
+                        float n = Fbm(world.x / size, world.z / size) * 2f - 1f;
+                        MoveWeld(id, direction * (sign * n * amount * 0.6f * w / scale));
+                    }
+
+                    break;
+                }
+                case SculptBrush.Terrace:
+                {
+                    float step = Mathf.Max(0.1f, dab.TerraceStep);
+                    Vector3 up = dab.Direction.normalized;
+                    float pull = Mathf.Clamp01(dab.Strength * 0.5f);
+                    foreach ((int id, float w) in affected)
+                    {
+                        float height = Vector3.Dot(toWorld.MultiplyPoint3x4(WeldPosition(id)), up);
+                        float target = TerraceHeight(height, step);
+                        MoveWeld(id, toLocal.MultiplyVector(up * ((target - height) * pull * w)));
+                    }
+
+                    break;
+                }
                 case SculptBrush.Raise:
                     foreach ((int id, float w) in affected) MoveWeld(id, direction * (sign * amount * w / scale));
                     break;
@@ -291,6 +341,108 @@ namespace WorldBuilder.Editor.MeshSculpt
 
             RecalculateNormals();
             return true;
+        }
+
+        /// <summary>
+        /// 잡아 끌기를 시작한다: 브러시 아래를 잘게 나누고, 그 안의 정점과 처음 자리를 기억한다.
+        /// 돌려준 번호로 <see cref="Grab"/>을 부르면 그 정점들이 처음 자리에서 끈 만큼 옮겨진다.
+        /// 대칭이면 거울 자리마다 한 번씩 부른다.
+        /// </summary>
+        public int BeginGrab(SculptDab dab)
+        {
+            Matrix4x4 toLocal = transform.worldToLocalMatrix;
+            float scale = Mathf.Max(1e-6f, transform.lossyScale.x);
+            Vector3 center = toLocal.MultiplyPoint3x4(dab.Center);
+            float radius = dab.Radius / scale;
+            if (dab.Detail > 0f) Subdivide(center, radius, dab.Detail / scale);
+            var grabbed = new List<(int, float, Vector3)>();
+            foreach ((int id, float w) in Collect(center, radius, dab.Hardness, dab.Falloff))
+                grabbed.Add((id, w, WeldPosition(id)));
+            grabs.Add(grabbed);
+            return grabs.Count - 1;
+        }
+
+        /// <summary>잡은 정점을 처음 자리에서 <paramref name="worldOffset"/>만큼 옮긴다. 움직였으면 true.</summary>
+        public bool Grab(int handle, Vector3 worldOffset)
+        {
+            if (handle < 0 || handle >= grabs.Count || grabs[handle].Count == 0) return false;
+            Vector3 offset = transform.worldToLocalMatrix.MultiplyVector(worldOffset);
+            foreach ((int id, float w, Vector3 origin) in grabs[handle])
+                MoveWeld(id, origin + offset * w - WeldPosition(id));
+            RecalculateNormals();
+            return true;
+        }
+
+        /// <summary>잡아 끌기를 끝낸다(손을 뗐을 때).</summary>
+        public void EndGrab() => grabs.Clear();
+
+        /// <summary>브러시 안의 용접 정점과 그 세기. 세기는 가운데 단단한 부분에서 1, 가장자리에서 0.</summary>
+        private List<(int id, float weight)> Collect(Vector3 center, float radius, float hardness, SculptFalloff falloff)
+        {
+            var affected = new List<(int id, float weight)>();
+            float inner = radius * Mathf.Clamp01(hardness) * 0.95f;
+            float radiusSqr = radius * radius;
+            for (int id = 0; id < weldVertices.Count; id++)
+            {
+                if (weldVertices[id].Count == 0) continue;
+                float distanceSqr = (WeldPosition(id) - center).sqrMagnitude;
+                if (distanceSqr >= radiusSqr) continue;
+                float distance = Mathf.Sqrt(distanceSqr);
+                float t = distance <= inner ? 1f : 1f - (distance - inner) / (radius - inner);
+                affected.Add((id, Falloff(t, falloff)));
+            }
+
+            return affected;
+        }
+
+        /// <summary><paramref name="t"/>: 가장자리 0 → 가운데 1.</summary>
+        private static float Falloff(float t, SculptFalloff falloff)
+        {
+            t = Mathf.Clamp01(t);
+            switch (falloff)
+            {
+                case SculptFalloff.Sphere: return Mathf.Sqrt(1f - (1f - t) * (1f - t));
+                case SculptFalloff.Sharp: return t * t;
+                case SculptFalloff.Linear: return t;
+                case SculptFalloff.Constant: return t > 0f ? 1f : 0f;
+                default: return t * t * (3f - 2f * t);
+            }
+        }
+
+        /// <summary>브러시 가운데 축으로 옆으로 모은다. 음수면 벌린다.</summary>
+        private void Pinch(List<(int id, float weight)> affected, Vector3 center, Vector3 axis, float strength)
+        {
+            foreach ((int id, float w) in affected)
+            {
+                Vector3 toCenter = center - WeldPosition(id);
+                toCenter -= axis * Vector3.Dot(toCenter, axis);
+                MoveWeld(id, toCenter * (strength * w));
+            }
+        }
+
+        /// <summary>계단 높이: 단마다 85%는 평평하고 나머지 15%가 가파른 벽.</summary>
+        private static float TerraceHeight(float height, float step)
+        {
+            float level = Mathf.Floor(height / step);
+            float fraction = height / step - level;
+            float riser = Mathf.InverseLerp(0.85f, 1f, fraction);
+            return (level + riser * riser * (3f - 2f * riser)) * step;
+        }
+
+        /// <summary>0..1 결 노이즈(Perlin 네 겹). 월드 좌표로 계산해 메시가 달라도 결이 이어진다.</summary>
+        private static float Fbm(float x, float z)
+        {
+            float sum = 0f, amplitude = 0.5f, total = 0f;
+            for (int octave = 0; octave < 4; octave++)
+            {
+                sum += Mathf.PerlinNoise(x + 37.1f * octave, z - 19.7f * octave) * amplitude;
+                total += amplitude;
+                x *= 2.03f;
+                z *= 2.03f;
+                amplitude *= 0.5f;
+            }
+
+            return sum / total;
         }
 
         private void MoveWeld(int id, Vector3 offset)
