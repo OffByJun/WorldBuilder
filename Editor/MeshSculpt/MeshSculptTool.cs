@@ -18,7 +18,8 @@ namespace WorldBuilder.Editor.MeshSculpt
     public sealed class MeshSculptTool : IWorldBuilderTool
     {
         internal const string SculptFolder = "Assets/008_WorldBuilder/Sculpted";
-        private const int ColliderRefreshEvery = 6;
+        // 콜라이더를 다시 굽는 일은 큰 맵 메시에서 수십 ms라, 획 도중에는 이 간격으로만 한다(커서가 새 표면을 따라가게).
+        private const double ColliderRefreshSeconds = 0.3;
 
         private static readonly Dictionary<string, (string ko, string en)> Text = new Dictionary<string, (string, string)>
         {
@@ -148,7 +149,7 @@ namespace WorldBuilder.Editor.MeshSculpt
         private Vector3 lastDragPoint;
         private readonly List<(SculptMesh mesh, int handle, int mirror)> grabbed = new List<(SculptMesh, int, int)>();
         private int undoGroup;
-        private int dabsSinceCollider;
+        private double lastColliderRefresh;
         private Vector3 lastDab;
         private Vector3 planePoint;
         private Vector3 planeNormal;
@@ -386,6 +387,7 @@ namespace WorldBuilder.Editor.MeshSculpt
                 if (e.type == EventType.MouseDrag && e.button == 0)
                 {
                     if (TryDragPoint(e.mousePosition, out Vector3 point)) Drag(point);
+                    SceneView.RepaintAll();
                     e.Use();
                 }
                 else if (e.type == EventType.MouseUp && e.button == 0)
@@ -394,11 +396,14 @@ namespace WorldBuilder.Editor.MeshSculpt
                     e.Use();
                 }
 
-                DrawDragCursor();
-                SceneView.RepaintAll();
+                if (e.type == EventType.Repaint) DrawDragCursor();
                 return;
             }
 
+            // Layout 같은 다른 이벤트에서는 쏠 필요가 없다. 매 이벤트마다 다시 그리라고 하면 씬 뷰가 쉬지 않고 돌아 느려진다.
+            bool mouse = e.type == EventType.MouseMove || e.type == EventType.MouseDrag ||
+                         e.type == EventType.MouseDown || e.type == EventType.MouseUp;
+            if (!mouse && e.type != EventType.Repaint) return;
             if (!SceneRaycaster.TryRaycast(e.mousePosition, out RaycastHit hit))
             {
                 if (e.type == EventType.MouseUp && stroking) EndStroke();
@@ -406,8 +411,8 @@ namespace WorldBuilder.Editor.MeshSculpt
             }
 
             SculptBrush active = e.shift && brush != SculptBrush.Hole ? SculptBrush.Smooth : brush;
-            DrawCursor(hit, active, e.control);
-            SceneView.RepaintAll();
+            if (e.type == EventType.Repaint) DrawCursor(hit, active, e.control);
+            if (e.type == EventType.MouseMove || e.type == EventType.MouseDrag) SceneView.RepaintAll();
 
             if (e.alt) return;
             if (e.type == EventType.MouseDown && e.button == 0)
@@ -511,7 +516,7 @@ namespace WorldBuilder.Editor.MeshSculpt
             strokeBrush = active;
             strokeTouched.Clear();
             grabbed.Clear();
-            dabsSinceCollider = 0;
+            lastColliderRefresh = EditorApplication.timeSinceStartup;
             Undo.IncrementCurrentGroup();
             undoGroup = Undo.GetCurrentGroup();
             planePoint = hit.point;
@@ -574,8 +579,9 @@ namespace WorldBuilder.Editor.MeshSculpt
 
         private void RefreshCollidersNow(bool force)
         {
-            if (!force && ++dabsSinceCollider < ColliderRefreshEvery) return;
-            dabsSinceCollider = 0;
+            double now = EditorApplication.timeSinceStartup;
+            if (!force && now - lastColliderRefresh < ColliderRefreshSeconds) return;
+            lastColliderRefresh = now;
             foreach (SculptMesh mesh in strokeTouched) RefreshCollider(mesh.Filter);
         }
 
