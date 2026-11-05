@@ -10,11 +10,20 @@ namespace WorldBuilder.Entities.Resources.Systems
     {
         // Built once here: building it inside OnUpdate made a managed array, which stopped Burst compiling OnUpdate.
         private EntityQuery _exclusions;
+        private ComponentLookup<ResourcePieceState> _pieces;
+        private ComponentLookup<ResourcePieceCut> _cuts;
+        private ComponentLookup<Unity.Transforms.LocalTransform> _positions;
+        private ComponentLookup<WorldEntitySpawnRate> _rates;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             _exclusions = new EntityQueryBuilder(Allocator.Temp).WithAll<ResourceSpawnExclusion>().Build(ref state);
+            _pieces = state.GetComponentLookup<ResourcePieceState>();
+            _cuts = state.GetComponentLookup<ResourcePieceCut>();
+            _positions = state.GetComponentLookup<Unity.Transforms.LocalTransform>(true);
+            _rates = state.GetComponentLookup<WorldEntitySpawnRate>(true);
+            state.RequireForUpdate<EndSimulationEntityCommandBufferSystem.Singleton>();
         }
 
         [BurstCompile]
@@ -24,21 +33,25 @@ namespace WorldBuilder.Entities.Resources.Systems
             float rate = SystemAPI.TryGetSingleton<ResourceRegenerationRate>(out var globalRate)
                 ? Unity.Mathematics.math.max(0f, globalRate.Value) : 1f;
             if (rate <= 0f) return;
-            using NativeArray<ResourceSpawnExclusion> exclusions = _exclusions.ToComponentDataArray<ResourceSpawnExclusion>(Allocator.TempJob);
-            EntityCommandBuffer commands = new EntityCommandBuffer(Allocator.TempJob);
+            _pieces.Update(ref state);
+            _cuts.Update(ref state);
+            _positions.Update(ref state);
+            _rates.Update(ref state);
+            NativeArray<ResourceSpawnExclusion> exclusions = _exclusions.ToComponentDataArray<ResourceSpawnExclusion>(Allocator.TempJob);
+            // The re-enabled nodes are played back at the end of the simulation group, so the frame does not wait on the job.
+            EntityCommandBuffer commands = SystemAPI.GetSingleton<EndSimulationEntityCommandBufferSystem.Singleton>()
+                .CreateCommandBuffer(state.WorldUnmanaged);
             state.Dependency = new RespawnJob
             {
                 DeltaTime = SystemAPI.Time.DeltaTime * rate,
-                Pieces = state.GetComponentLookup<ResourcePieceState>(),
-                Cuts = state.GetComponentLookup<ResourcePieceCut>(),
-                Positions = state.GetComponentLookup<Unity.Transforms.LocalTransform>(true),
-                Rates = state.GetComponentLookup<WorldEntitySpawnRate>(true),
+                Pieces = _pieces,
+                Cuts = _cuts,
+                Positions = _positions,
+                Rates = _rates,
                 Exclusions = exclusions,
                 Commands = commands.AsParallelWriter()
             }.ScheduleParallel(state.Dependency);
-            state.Dependency.Complete();
-            commands.Playback(state.EntityManager);
-            commands.Dispose();
+            exclusions.Dispose(state.Dependency);
         }
 
         [BurstCompile]
