@@ -12,7 +12,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
     [UpdateBefore(typeof(WorldEntityRegionActivationSystem))]
     public partial struct CreatureSpawnSystem : ISystem
     {
-        // Game-specific natural species selection at the final collision-safe position.
+        // Game-specific natural species selection at the final collision-safe position. Zero rejects the spawn.
         public static System.Func<CreatureSpawnRequest, float3, int> SelectNaturalPrefab;
 
         public void OnCreate(ref SystemState state)
@@ -100,6 +100,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 if (request.Owner != Entity.Null && SelectNaturalPrefab != null)
                 {
                     int selected = SelectNaturalPrefab(request, position);
+                    if (selected <= 0) continue;
                     if (selected != request.PrefabId && prefabMap.TryGetValue(selected, out Entity selectedPrefab) &&
                         state.EntityManager.HasComponent<Creature>(selectedPrefab))
                     {
