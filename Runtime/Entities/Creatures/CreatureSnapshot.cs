@@ -18,6 +18,7 @@ namespace WorldBuilder.Entities.Creatures
         public float Affinity;
         public byte TameAttempts;
         public byte IsTamed;
+        public float BondProgress;
     }
 
     public static class CreatureSnapshotService
@@ -49,7 +50,9 @@ namespace WorldBuilder.Entities.Creatures
                 WorldEntityDescriptor descriptor = entityManager.GetComponentData<WorldEntityDescriptor>(entity);
                 bool tamed = entityManager.HasComponent<CreatureTaming>(entity) &&
                              entityManager.GetComponentData<CreatureTaming>(entity).IsTamed != 0;
-                if ((descriptor.Flags & WorldEntityFlags.Persistent) == 0 && !tamed) continue;
+                float progress = entityManager.HasComponent<CreatureTaming>(entity)
+                    ? entityManager.GetComponentData<CreatureTaming>(entity).BondProgress : 0;
+                if ((descriptor.Flags & WorldEntityFlags.Persistent) == 0 && !tamed && progress <= 0) continue;
 
                 LocalTransform transform = entityManager.GetComponentData<LocalTransform>(entity);
                 Creature creature = entityManager.GetComponentData<Creature>(entity);
@@ -72,6 +75,7 @@ namespace WorldBuilder.Entities.Creatures
                     CreatureTaming taming = entityManager.GetComponentData<CreatureTaming>(entity);
                     snapshot.TameAttempts = taming.AttemptCount;
                     snapshot.IsTamed = taming.IsTamed;
+                    snapshot.BondProgress = taming.BondProgress;
                 }
                 destination.Add(snapshot);
             }
@@ -104,6 +108,7 @@ namespace WorldBuilder.Entities.Creatures
                     Affinity = snapshot.Affinity,
                     TameAttempts = snapshot.TameAttempts,
                     IsTamed = snapshot.IsTamed,
+                    BondProgress = snapshot.BondProgress,
                     Seed = CreatureGradeRules.SanitizeSeed(snapshot.Identity.Low != 0
                         ? (uint)snapshot.Identity.Low
                         : (uint)(i + 1)),

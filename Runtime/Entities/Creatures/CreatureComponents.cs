@@ -65,7 +65,8 @@ namespace WorldBuilder.Entities.Creatures
         WrongItem,
         Cooldown,
         Alarmed,
-        AlreadyTamed
+        AlreadyTamed,
+        BondingIncomplete
     }
 
     public struct Creature : IComponentData
@@ -84,6 +85,12 @@ namespace WorldBuilder.Entities.Creatures
 
     public struct DecorativeCreature : IComponentData { }
     public struct CreatureImmobilized : IComponentData { }
+
+    /// <summary>애니메이션을 유지하면서 지정 시각까지 수영 이동만 멈춘다.</summary>
+    public struct CreatureSwimPause : IComponentData
+    {
+        public double Until;
+    }
 
     public struct CreatureSwim : IComponentData
     {
@@ -171,6 +178,10 @@ namespace WorldBuilder.Entities.Creatures
         public byte GuaranteedAfterAttempts;
         public byte AttemptCount;
         public byte IsTamed;
+        public CreatureBondingMode BondMode;
+        public float BondSeconds;
+        public float BondProgress;
+        public double BondUntil;
     }
 
     public struct CreatureTamed : IComponentData, IEnableableComponent { }
@@ -199,6 +210,7 @@ namespace WorldBuilder.Entities.Creatures
         public float Affinity;
         public byte TameAttempts;
         public byte IsTamed;
+        public float BondProgress;
         public uint Seed;
         public CreatureSpawnRequestFlags StateFlags;
     }
@@ -274,6 +286,8 @@ namespace WorldBuilder.Entities.Creatures
         public Entity Target;
         public int ItemId;
         public float3 SourcePosition;
+        public CreatureGrade FoodGrade;
+        public byte HasFoodGrade;
     }
 
     [InternalBufferCapacity(0)]

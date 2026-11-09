@@ -19,6 +19,10 @@ namespace WorldBuilder.Entities.Creatures
         public float PersonalSpace;
         public float ApproachDistance;
         public float ReactionSpeedMultiplier;
+        public CreatureReaction CurrentReaction;
+        public byte PlayerDetected;
+        public uint AlertVersion;
+        public double AlertUntil;
     }
 
     public struct CreaturePlayerFocus : IComponentData
@@ -27,8 +31,16 @@ namespace WorldBuilder.Entities.Creatures
         public byte IsValid;
     }
 
+    /// <summary>동행 생물이 주는 플레이어 주변 감지·탐색 보조다.</summary>
+    public struct CreaturePlayerSupport : IComponentData
+    {
+        public float DetectionMultiplier;
+        public float DiscoveryRange;
+    }
+
     public static class CreaturePerceptionRules
     {
+        public const float MaximumFleeSpeed = 4f;
         public static CreatureReaction DefaultWildReaction(CreaturePersonality personality)
         {
             switch (personality)
@@ -58,19 +70,20 @@ namespace WorldBuilder.Entities.Creatures
         /// <summary>Taming flips a fearful reaction into a friendly one; the creature no longer avoids the player.</summary>
         public static CreatureReaction Resolve(in CreaturePerception perception, bool isTamed, float distance)
         {
-            if (perception.DetectionRadius <= 0f || distance > perception.DetectionRadius)
+            float detection = perception.DetectionRadius + (perception.CurrentReaction != CreatureReaction.Ignore ? 2f : 0f);
+            if (perception.DetectionRadius <= 0f || distance > detection)
                 return CreatureReaction.Ignore;
 
             CreatureReaction reaction = isTamed ? perception.TamedReaction : perception.WildReaction;
             switch (reaction)
             {
                 case CreatureReaction.Flee:
-                    return distance <= perception.PersonalSpace ? CreatureReaction.Flee : CreatureReaction.Ignore;
+                    float safeDistance = perception.CurrentReaction == CreatureReaction.Flee
+                        ? math.max(perception.PersonalSpace + 2f, perception.DetectionRadius * .85f) : perception.PersonalSpace;
+                    return distance <= safeDistance ? CreatureReaction.Flee : CreatureReaction.Ignore;
                 case CreatureReaction.Approach:
                 case CreatureReaction.Gather:
-                    return distance <= math.max(0.1f, perception.ApproachDistance)
-                        ? CreatureReaction.Ignore
-                        : reaction;
+                    return reaction;
                 default:
                     return CreatureReaction.Ignore;
             }
@@ -113,7 +126,7 @@ namespace WorldBuilder.Entities.Creatures
         {
             switch (reaction)
             {
-                case CreatureReaction.Flee: return math.max(1f, perception.ReactionSpeedMultiplier);
+                case CreatureReaction.Flee: return math.clamp(perception.ReactionSpeedMultiplier, 1f, 1.35f);
                 case CreatureReaction.Approach:
                 case CreatureReaction.Gather: return 1f;
                 default: return 1f;

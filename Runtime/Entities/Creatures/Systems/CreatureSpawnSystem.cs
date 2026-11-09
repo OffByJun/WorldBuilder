@@ -167,6 +167,8 @@ namespace WorldBuilder.Entities.Creatures.Systems
                     CreatureTaming taming = state.EntityManager.GetComponentData<CreatureTaming>(prefab);
                     taming.AttemptCount = request.TameAttempts;
                     taming.IsTamed = request.IsTamed;
+                    taming.BondProgress = math.saturate(request.BondProgress);
+                    taming.BondUntil = 0;
                     commands.SetComponent(instance, taming);
                     if (state.EntityManager.HasComponent<CreatureTamed>(prefab))
                         commands.SetComponentEnabled<CreatureTamed>(instance, request.IsTamed != 0);

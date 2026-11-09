@@ -35,6 +35,9 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 Config = SystemAPI.GetSingleton<WorldEntityRuntimeConfig>(),
                 CollisionWorld = SystemAPI.GetSingleton<PhysicsWorldSingleton>().CollisionWorld,
                 Creatures = SystemAPI.GetComponentLookup<CreatureAlarm>(true),
+                Pauses = SystemAPI.GetComponentLookup<CreatureSwimPause>(true),
+                Perceptions = SystemAPI.GetComponentLookup<CreaturePerception>(true),
+                Taming = SystemAPI.GetComponentLookup<CreatureTaming>(true),
                 Immobilized = SystemAPI.GetComponentLookup<CreatureImmobilized>(true)
             }.ScheduleParallel(state.Dependency);
         }
@@ -51,13 +54,17 @@ namespace WorldBuilder.Entities.Creatures.Systems
             // Every swimmer carries an alarm, so this tells a creature's body apart from the seabed.
             [ReadOnly] public ComponentLookup<CreatureAlarm> Creatures;
             [ReadOnly] public ComponentLookup<CreatureImmobilized> Immobilized;
+            [ReadOnly] public ComponentLookup<CreatureSwimPause> Pauses;
+            [ReadOnly] public ComponentLookup<CreaturePerception> Perceptions;
+            [ReadOnly] public ComponentLookup<CreatureTaming> Taming;
 
             private void Execute(Entity entity, ref LocalTransform transform, ref CreatureSwim swim,
                 ref CreatureRandom seed,
                 in CreatureAlarm alarm, in CreatureMoveOrder order, EnabledRefRO<CreatureMoveOrder> hasOrder,
                 EnabledRefRO<CreatureCaptured> captured, EnabledRefRO<WorldEntityActive> active)
             {
-                if (captured.ValueRO || !active.ValueRO || Immobilized.HasComponent(entity))
+                if (captured.ValueRO || !active.ValueRO || Immobilized.HasComponent(entity) ||
+                    (Pauses.TryGetComponent(entity, out var pause) && pause.Until > ElapsedTime))
                 {
                     swim.StuckSeconds = 0f;
                     swim.CurrentSpeed = swim.YawRate = swim.PitchRate = 0f;
@@ -120,7 +127,21 @@ namespace WorldBuilder.Entities.Creatures.Systems
                     seed.State = CreatureGradeRules.SanitizeSeed(random.NextUInt());
                 }
 
+                // 타격 도주와 접근 반응 도주 모두 플레이어가 추격할 수 있는 속도로 제한한다.
+                bool fleeing = alarmed || Perceptions.TryGetComponent(entity, out var perception) &&
+                    perception.CurrentReaction == CreatureReaction.Flee;
+                if (fleeing)
+                {
+                    speed = math.min(speed, CreaturePerceptionRules.MaximumFleeSpeed);
+                    swim.CurrentSpeed = math.min(swim.CurrentSpeed, CreaturePerceptionRules.MaximumFleeSpeed);
+                }
+
                 // Aim at the water too, so a target above the surface does not keep a creature pressed against it.
+                if (Taming.TryGetComponent(entity, out var tame) && tame.IsTamed == 0 && tame.BondUntil > ElapsedTime)
+                {
+                    speed = math.min(speed, CreatureBondingRules.MaximumFollowSpeed);
+                    swim.CurrentSpeed = math.min(swim.CurrentSpeed, CreatureBondingRules.MaximumFollowSpeed);
+                }
                 if (CreatureTerrainCollision.TryClear(CollisionWorld, Creatures, entity, swim.TargetPoint,
                         radius, WaterSurface, out float3 destination))
                     swim.TargetPoint = destination;

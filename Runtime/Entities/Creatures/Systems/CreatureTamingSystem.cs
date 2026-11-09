@@ -51,8 +51,9 @@ namespace WorldBuilder.Entities.Creatures.Systems
 
                 CreatureRandom seed = state.EntityManager.GetComponentData<CreatureRandom>(request.Target);
                 Random random = Random.CreateFromIndex(CreatureGradeRules.SanitizeSeed(seed.State));
-                CreatureTamingOutcome outcome =
-                    CreatureTamingRules.Attempt(taming, preferred, gradeMultiplier, ref random);
+                CreatureTamingOutcome outcome = taming.BondMode != CreatureBondingMode.None
+                    ? new CreatureTamingOutcome(true, 1f, true)
+                    : CreatureTamingRules.Attempt(taming, preferred, gradeMultiplier, ref random);
                 seed.State = CreatureGradeRules.SanitizeSeed(random.NextUInt());
                 state.EntityManager.SetComponentData(request.Target, seed);
 
@@ -107,10 +108,15 @@ namespace WorldBuilder.Entities.Creatures.Systems
             if ((creature.Interactions & CreatureInteractionMask.Feed) == 0)
                 return CreatureFeedFailure.NotFeedable;
             if (creature.SizeClass == CreatureSizeClass.Large) return CreatureFeedFailure.NotFeedable;
+            if (taming.BondMode != CreatureBondingMode.None && taming.IsTamed != 0) return CreatureFeedFailure.AlreadyTamed;
+            if (taming.IsTamed == 0 && taming.BondMode != CreatureBondingMode.None && taming.BondProgress < 1f)
+                return CreatureFeedFailure.BondingIncomplete;
+            if (taming.BondMode != CreatureBondingMode.None &&
+                (request.HasFoodGrade == 0 || request.FoodGrade < creature.Grade)) return CreatureFeedFailure.WrongItem;
             if (taming.IsTamed != 0 && affinity.Value >= affinity.MaximumValue)
                 return CreatureFeedFailure.AlreadyTamed;
             if (elapsed < affinity.NextFeedTime) return CreatureFeedFailure.Cooldown;
-            if (entityManager.HasComponent<CreatureAlarm>(request.Target) &&
+            if (taming.BondMode == CreatureBondingMode.None && entityManager.HasComponent<CreatureAlarm>(request.Target) &&
                 CreatureTamingRules.IsAlarmed(entityManager.GetComponentData<CreatureAlarm>(request.Target), elapsed))
                 return CreatureFeedFailure.Alarmed;
             return CreatureFeedFailure.None;

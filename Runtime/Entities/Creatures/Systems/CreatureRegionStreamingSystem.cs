@@ -49,6 +49,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
             {
                 Loaded = loaded,
                 ElapsedTime = SystemAPI.Time.ElapsedTime,
+                Taming = SystemAPI.GetComponentLookup<CreatureTaming>(true),
                 Despawns = _pendingDespawns.AsParallelWriter()
             }.ScheduleParallel(state.Dependency);
             state.Dependency = loaded.Dispose(state.Dependency);
@@ -62,12 +63,15 @@ namespace WorldBuilder.Entities.Creatures.Systems
             [ReadOnly] public NativeParallelHashSet<int2> Loaded;
             public double ElapsedTime;
             public NativeQueue<Entity>.ParallelWriter Despawns;
+            [ReadOnly] public ComponentLookup<CreatureTaming> Taming;
 
             private void Execute(Entity entity,
                 ref CreatureStreaming streaming, in WorldEntityChunk ownership,
                 in WorldEntityDescriptor descriptor, in Creature creature)
             {
                 if ((descriptor.Flags & WorldEntityFlags.Persistent) != 0) return;
+                if (Taming.TryGetComponent(entity, out var tame) && tame.BondProgress > 0)
+                { streaming.UnloadedSince = 0; return; }
                 if (Loaded.Contains(ownership.Region))
                 {
                     streaming.UnloadedSince = 0d;

@@ -72,7 +72,8 @@ namespace WorldBuilder.Entities.Creatures
             return true;
         }
 
-        public static bool TryFeed(Entity target, int itemId, Vector3 sourcePosition, out uint requestId)
+        public static bool TryFeed(Entity target, int itemId, Vector3 sourcePosition, out uint requestId,
+            CreatureGrade? foodGrade = null)
         {
             requestId = 0;
             if (!TryGetRuntime(out EntityManager entityManager, out Entity runtime) ||
@@ -83,7 +84,8 @@ namespace WorldBuilder.Entities.Creatures
                 RequestId = requestId,
                 Target = target,
                 ItemId = itemId,
-                SourcePosition = sourcePosition
+                SourcePosition = sourcePosition,
+                FoodGrade = foodGrade.GetValueOrDefault(), HasFoodGrade = (byte)(foodGrade.HasValue ? 1 : 0)
             });
             return true;
         }
