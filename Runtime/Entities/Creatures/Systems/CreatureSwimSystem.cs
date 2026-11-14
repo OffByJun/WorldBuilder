@@ -38,6 +38,8 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 Pauses = SystemAPI.GetComponentLookup<CreatureSwimPause>(true),
                 Perceptions = SystemAPI.GetComponentLookup<CreaturePerception>(true),
                 Taming = SystemAPI.GetComponentLookup<CreatureTaming>(true),
+                IgnoresPlayer = SystemAPI.GetComponentLookup<CreatureIgnoresPlayer>(true),
+                ContinuousSwimmers = SystemAPI.GetComponentLookup<CreatureContinuousSwim>(true),
                 Immobilized = SystemAPI.GetComponentLookup<CreatureImmobilized>(true)
             }.ScheduleParallel(state.Dependency);
         }
@@ -57,6 +59,8 @@ namespace WorldBuilder.Entities.Creatures.Systems
             [ReadOnly] public ComponentLookup<CreatureSwimPause> Pauses;
             [ReadOnly] public ComponentLookup<CreaturePerception> Perceptions;
             [ReadOnly] public ComponentLookup<CreatureTaming> Taming;
+            [ReadOnly] public ComponentLookup<CreatureIgnoresPlayer> IgnoresPlayer;
+            [ReadOnly] public ComponentLookup<CreatureContinuousSwim> ContinuousSwimmers;
 
             private void Execute(Entity entity, ref LocalTransform transform, ref CreatureSwim swim,
                 ref CreatureRandom seed,
@@ -74,16 +78,30 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 // Swimmers live under the surface: nothing, not a flee, a follow order or a shove, takes one out of the water.
                 float radius = CreatureTerrainCollision.Radius(transform.Scale, swim.BodyRadius);
                 float ceiling = WaterSurface - radius - .05f;
-                bool alarmed = CreatureTamingRules.IsAlarmed(alarm, ElapsedTime);
+                bool ignoresPlayer = IgnoresPlayer.HasComponent(entity);
+                bool continuous = ContinuousSwimmers.HasComponent(entity);
+                bool hasMoveOrder = !ignoresPlayer && hasOrder.ValueRO;
+                bool alarmed = !ignoresPlayer && CreatureTamingRules.IsAlarmed(alarm, ElapsedTime);
                 float3 originalTarget = alarmed
                     ? CreatureSwimMath.ConstrainToHomeRegion(CreatureTamingRules.FleeTarget(transform.Position, alarm), swim, Config)
-                    : hasOrder.ValueRO ? order.Target : swim.TargetPoint;
-                float arriveRadius = hasOrder.ValueRO && !alarmed ? math.max(0f, order.ArriveRadius) : math.max(.25f, swim.ArriveRadius);
-                RecoverIfStuck(entity, ref transform, ref swim, originalTarget, arriveRadius, radius,
-                    !alarmed && !hasOrder.ValueRO);
-
+                    : hasMoveOrder ? order.Target : swim.TargetPoint;
+                float arriveRadius = hasMoveOrder && !alarmed ? math.max(0f, order.ArriveRadius) : math.max(.25f, swim.ArriveRadius);
+                if (!continuous)
+                    RecoverIfStuck(entity, ref transform, ref swim, originalTarget, arriveRadius, radius,
+                        !alarmed && !hasMoveOrder);
                 if (!CreatureTerrainCollision.TryClear(CollisionWorld, Creatures, entity, transform.Position,
                         radius, WaterSurface, out float3 safeStart)) return;
+                if (continuous)
+                {
+                    float maxCorrection = math.max(0f, swim.CruiseSpeed * DeltaTime);
+                    float3 correction = safeStart - transform.Position;
+                    if (math.lengthsq(correction) > maxCorrection * maxCorrection)
+                    {
+                        transform.Position += math.normalizesafe(correction) * maxCorrection;
+                        swim.NextRepathTime = 0d;
+                        return;
+                    }
+                }
                 transform.Position = safeStart;
 
                 float speed = swim.CruiseSpeed;
@@ -95,7 +113,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
                     swim.NextRepathTime = ElapsedTime;
                     speed *= math.max(1f, alarm.FleeSpeedMultiplier);
                 }
-                else if (hasOrder.ValueRO)
+                else if (hasMoveOrder)
                 {
                     swim.TargetPoint = order.Target;
                     swim.NextRepathTime = ElapsedTime;
@@ -108,6 +126,11 @@ namespace WorldBuilder.Entities.Creatures.Systems
                         return;
                     }
                     speed *= math.max(0.1f, order.SpeedMultiplier);
+                }
+                else if (continuous)
+                {
+                    swim.TargetPoint = CreatureSwimMath.PatrolTarget(transform.Position, transform.Rotation,
+                        swim.Home, swim.WanderRadius);
                 }
                 else if (CreatureSwimMath.ShouldRepath(swim, transform.Position, ElapsedTime))
                 {
@@ -128,7 +151,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 }
 
                 // 타격 도주와 접근 반응 도주 모두 플레이어가 추격할 수 있는 속도로 제한한다.
-                bool fleeing = alarmed || Perceptions.TryGetComponent(entity, out var perception) &&
+                bool fleeing = alarmed || !ignoresPlayer && Perceptions.TryGetComponent(entity, out var perception) &&
                     perception.CurrentReaction == CreatureReaction.Flee;
                 if (fleeing)
                 {
@@ -137,10 +160,12 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 }
 
                 // Aim at the water too, so a target above the surface does not keep a creature pressed against it.
-                if (Taming.TryGetComponent(entity, out var tame) && tame.IsTamed == 0 && tame.BondUntil > ElapsedTime)
+                if (!ignoresPlayer && Taming.TryGetComponent(entity, out var tame) && tame.IsTamed == 0 && tame.BondUntil > ElapsedTime)
                 {
-                    speed = math.min(speed, CreatureBondingRules.MaximumFollowSpeed);
-                    swim.CurrentSpeed = math.min(swim.CurrentSpeed, CreatureBondingRules.MaximumFollowSpeed);
+                    float maximum = tame.BondMode == CreatureBondingMode.SwimTogether
+                        ? CreatureBondingRules.MaximumSwimTogetherSpeed : CreatureBondingRules.MaximumFollowSpeed;
+                    speed = math.min(speed, maximum);
+                    swim.CurrentSpeed = math.min(swim.CurrentSpeed, maximum);
                 }
                 if (CreatureTerrainCollision.TryClear(CollisionWorld, Creatures, entity, swim.TargetPoint,
                         radius, WaterSurface, out float3 destination))
@@ -151,12 +176,12 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 float3 navigationTarget = CreatureTerrainCollision.Navigate(CollisionWorld, Creatures, entity,
                     transform.Position, swim.TargetPoint, radius, speed, WaterSurface, ElapsedTime, ref swim);
                 // Fleeing and following the player need quicker turns than idle wandering.
-                float turnSpeed = swim.TurnSpeedRadians * (alarmed ? 1.6f : hasOrder.ValueRO ? 1.3f : 1f);
+                float turnSpeed = swim.TurnSpeedRadians * (alarmed ? 1.6f : hasMoveOrder ? 1.3f : 1f);
                 CreatureSwimStep step = CreatureSwimMath.AdvanceSmooth(transform.Position, transform.Rotation,
                     navigationTarget, speed, turnSpeed, DeltaTime,
-                    ref swim.CurrentSpeed, ref swim.YawRate, ref swim.PitchRate);
+                    ref swim.CurrentSpeed, ref swim.YawRate, ref swim.PitchRate, continuous && !alarmed && !hasMoveOrder);
                 float3 next = step.Position;
-                if (!alarmed && !hasOrder.ValueRO)
+                if (!alarmed && !hasMoveOrder)
                     next = CreatureSwimMath.ConstrainToHomeRegion(next, swim, Config);
                 next.y = math.min(next.y, ceiling);
                 next = CreatureTerrainCollision.Move(CollisionWorld, Creatures, entity, transform.Position,
@@ -169,7 +194,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 {
                     if (swim.BlockedSeconds - DeltaTime <= .75f) swim.NextAvoidanceTime = 0d;
                     swim.AvoidanceUntil = 0d;
-                    if (!alarmed && !hasOrder.ValueRO && swim.BlockedSeconds > 2f)
+                    if (!alarmed && !hasMoveOrder && swim.BlockedSeconds > 2f)
                     {
                         swim.NextRepathTime = 0d;
                         swim.BlockedSeconds = 0f;

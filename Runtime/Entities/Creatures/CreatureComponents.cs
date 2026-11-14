@@ -5,6 +5,13 @@ using Unity.Mathematics;
 
 namespace WorldBuilder.Entities.Creatures
 {
+    /// <summary>Allows a single instance of this prefab in the world, including streamed-out instances.</summary>
+    public struct CreatureUniqueSpawn : IComponentData { }
+
+    public struct CreatureIgnoresPlayer : IComponentData { }
+
+    public struct CreatureContinuousSwim : IComponentData { }
+
     public enum CreatureGrade : byte
     {
         Common = 0,
@@ -96,6 +103,7 @@ namespace WorldBuilder.Entities.Creatures
     {
         // Unscaled radius enclosing the visible model, including child offsets and wings.
         public float BodyRadius;
+        public float BaseSizeMultiplier;
         public float3 Home;
         public float3 TargetPoint;
         public int2 HomeRegion;

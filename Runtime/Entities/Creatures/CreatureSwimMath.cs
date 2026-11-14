@@ -34,6 +34,17 @@ namespace WorldBuilder.Entities.Creatures
         public static bool HasArrived(float3 position, float3 target, float arriveRadius)
             => math.distancesq(position, target) <= arriveRadius * arriveRadius;
 
+        /// <summary>Steer toward a point ahead on the patrol circle, through each bend at cruising speed.</summary>
+        public static float3 PatrolTarget(float3 position, quaternion rotation, float3 home, float radius)
+        {
+            float2 offset = position.xz - home.xz;
+            float2 forward = math.normalizesafe(math.forward(rotation).xz, new float2(0f, 1f));
+            float2 radial = math.normalizesafe(offset, forward);
+            float2 ahead = new float2(radial.x + radial.y, radial.y - radial.x) * .70710678f;
+            float2 point = home.xz + ahead * radius;
+            return new float3(point.x, home.y, point.y);
+        }
+
         /// <summary>Eases pitch and roll back to level while keeping the heading.</summary>
         public static quaternion LevelOut(quaternion rotation, float deltaTime, float rate = 2f)
         {
@@ -76,7 +87,7 @@ namespace WorldBuilder.Entities.Creatures
         /// </summary>
         public static CreatureSwimStep AdvanceSmooth(float3 position, quaternion rotation, float3 target,
             float cruiseSpeed, float turnSpeedRadians, float deltaTime,
-            ref float speed, ref float yawRate, ref float pitchRate)
+            ref float speed, ref float yawRate, ref float pitchRate, bool maintainCruise = false)
         {
             if (deltaTime <= 0f) return new CreatureSwimStep(position, rotation);
             float3 offset = target - position;
@@ -106,13 +117,15 @@ namespace WorldBuilder.Entities.Creatures
             float cruise = math.max(0f, cruiseSpeed);
             float alignment = math.saturate((math.dot(nextForward, heading) + .1f) / 1.1f);
             float arrival = math.saturate(distance / math.max(.5f, cruise * 1.2f));
-            float desiredSpeed = cruise * math.lerp(.3f, 1f, alignment) * math.lerp(.35f, 1f, arrival);
+            float desiredSpeed = maintainCruise
+                ? cruise
+                : cruise * math.lerp(.3f, 1f, alignment) * math.lerp(.35f, 1f, arrival);
             float acceleration = math.max(.5f, cruise * (desiredSpeed < speed ? 1.6f : .9f));
             speed = MoveTowards(math.max(0f, speed), desiredSpeed, acceleration * deltaTime);
 
             float steer = math.lerp(.2f, .7f, 1f - arrival);
-            float3 direction = math.normalizesafe(math.lerp(nextForward, heading, steer), heading);
-            float stepDistance = math.min(distance, speed * deltaTime);
+            float3 direction = maintainCruise ? nextForward : math.normalizesafe(math.lerp(nextForward, heading, steer), heading);
+            float stepDistance = maintainCruise ? speed * deltaTime : math.min(distance, speed * deltaTime);
             return new CreatureSwimStep(position + direction * stepDistance, nextRotation);
         }
 

@@ -2,6 +2,7 @@ using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Transforms;
+using WorldBuilder.Entities.Creatures;
 using WorldBuilder.Entities.Resources;
 
 namespace WorldBuilder.Entities.Systems
@@ -41,6 +42,21 @@ namespace WorldBuilder.Entities.Systems
             {
                 WorldEntitySpawnRequest request = requests[i];
                 if (!prefabMap.TryGetValue(request.PrefabId, out Entity prefab)) continue;
+                if (state.EntityManager.HasComponent<CreatureUniqueSpawn>(prefab))
+                {
+                    if (state.EntityManager.HasBuffer<CreatureSpawnRequest>(runtime))
+                        state.EntityManager.GetBuffer<CreatureSpawnRequest>(runtime).Add(new CreatureSpawnRequest
+                        {
+                            PrefabId = request.PrefabId,
+                            Position = request.Position,
+                            Rotation = request.Rotation,
+                            Identity = request.Identity,
+                            Seed = (uint)request.Identity.Low,
+                            Grade = CreatureGrade.Common,
+                            StateFlags = CreatureSpawnRequestFlags.ExplicitIdentity | CreatureSpawnRequestFlags.ExplicitGrade
+                        });
+                    continue;
+                }
 
                 Entity instance = commands.Instantiate(prefab);
                 WorldEntityIdentity identity = request.Identity;

@@ -43,6 +43,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
         }
 
         [BurstCompile]
+        [WithNone(typeof(CreatureIgnoresPlayer))]
         [WithOptions(EntityQueryOptions.IgnoreComponentEnabledState)]
         private partial struct PerceiveJob : IJobEntity
         {

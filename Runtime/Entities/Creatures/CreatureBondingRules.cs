@@ -16,6 +16,7 @@ namespace WorldBuilder.Entities.Creatures
     {
         public const float DefaultSeconds = 7.5f;
         public const float MaximumFollowSpeed = 4.5f;
+        public const float MaximumSwimTogetherSpeed = 16f;
         public static CreatureBondingMode ForSpecies(int prefabId) => prefabId switch
         {
             >= 2100 and <= 2104 or >= 3100 and <= 3104 => CreatureBondingMode.SwimTogether,

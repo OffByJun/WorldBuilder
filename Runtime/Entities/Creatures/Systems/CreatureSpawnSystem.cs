@@ -12,11 +12,17 @@ namespace WorldBuilder.Entities.Creatures.Systems
     [UpdateBefore(typeof(WorldEntityRegionActivationSystem))]
     public partial struct CreatureSpawnSystem : ISystem
     {
+        private EntityQuery _uniqueCreatures;
+
         // Game-specific natural species selection at the final collision-safe position. Zero rejects the spawn.
         public static System.Func<CreatureSpawnRequest, float3, int> SelectNaturalPrefab;
 
         public void OnCreate(ref SystemState state)
         {
+            _uniqueCreatures = new EntityQueryBuilder(Allocator.Temp)
+                .WithAll<CreatureUniqueSpawn, WorldEntityDescriptor>()
+                .WithOptions(EntityQueryOptions.IncludeDisabledEntities)
+                .Build(ref state);
             state.RequireForUpdate<WorldEntityRuntimeConfig>();
             state.RequireForUpdate<WorldEntityPrefabElement>();
             state.RequireForUpdate<CreatureSpawnRequest>();
@@ -56,12 +62,18 @@ namespace WorldBuilder.Entities.Creatures.Systems
             // Populate newly loaded habitats promptly, while keeping normal replenishment inexpensive.
             int budget = (requests[0].StateFlags & CreatureSpawnRequestFlags.InitialPopulation) != 0 ? 24 : 4;
             int requestCount = math.min(budget, requests.Length);
+            using var uniqueSpecies = new NativeHashSet<int>(math.max(1, _uniqueCreatures.CalculateEntityCount() + requestCount),
+                Allocator.Temp);
+            using var uniqueDescriptors = _uniqueCreatures.ToComponentDataArray<WorldEntityDescriptor>(Allocator.Temp);
+            foreach (var descriptor in uniqueDescriptors) uniqueSpecies.Add(descriptor.PrefabId);
             for (int i = 0; i < requestCount; i++)
             {
                 CreatureSpawnRequest request = requests[i];
                 if (!prefabMap.TryGetValue(request.PrefabId, out Entity prefab) ||
                     !state.EntityManager.HasComponent<Creature>(prefab)) continue;
+                if (uniqueSpecies.Contains(request.PrefabId)) continue;
 
+                int prefabId = request.PrefabId;
                 Random random = Random.CreateFromIndex(CreatureGradeRules.SanitizeSeed(request.Seed));
                 CreatureGrade grade =
                     (request.StateFlags & CreatureSpawnRequestFlags.ExplicitGrade) != 0
@@ -69,11 +81,7 @@ namespace WorldBuilder.Entities.Creatures.Systems
                         : CreatureGradeRules.SelectGrade(definitions, CreatureGradeMask.All, ref random);
                 CreatureGradeDefinition definition = CreatureGradeRules.Resolve(definitions, grade);
 
-                float baseScale = state.EntityManager.GetComponentData<LocalTransform>(prefab).Scale;
-                float scale = math.max(.001f, baseScale * definition.SizeMultiplier);
-                float bodyRadius = state.EntityManager.HasComponent<CreatureSwim>(prefab)
-                    ? state.EntityManager.GetComponentData<CreatureSwim>(prefab).BodyRadius : .5f;
-                float radius = CreatureTerrainCollision.Radius(scale, bodyRadius);
+                float scale = SpawnScale(state.EntityManager, prefab, definition.SizeMultiplier, out float radius);
                 float3 position = request.Position;
                 bool nearby = (request.StateFlags & CreatureSpawnRequestFlags.FindNearbyPosition) != 0;
                 // A summon can be inside a cave. Preserve clear local water instead of casting down from above its roof.
@@ -102,24 +110,24 @@ namespace WorldBuilder.Entities.Creatures.Systems
                     int selected = SelectNaturalPrefab(request, position);
                     if (selected <= 0) continue;
                     if (selected != request.PrefabId && prefabMap.TryGetValue(selected, out Entity selectedPrefab) &&
-                        state.EntityManager.HasComponent<Creature>(selectedPrefab))
+                        state.EntityManager.HasComponent<Creature>(selectedPrefab) && !uniqueSpecies.Contains(selected))
                     {
-                        float selectedScale = math.max(.001f,
-                            state.EntityManager.GetComponentData<LocalTransform>(selectedPrefab).Scale * definition.SizeMultiplier);
-                        float selectedBodyRadius = state.EntityManager.HasComponent<CreatureSwim>(selectedPrefab)
-                            ? state.EntityManager.GetComponentData<CreatureSwim>(selectedPrefab).BodyRadius : .5f;
-                        float selectedRadius = CreatureTerrainCollision.Radius(selectedScale, selectedBodyRadius);
+                        float selectedScale = SpawnScale(state.EntityManager, selectedPrefab, definition.SizeMultiplier,
+                            out float selectedRadius);
                         // Recheck habitat after local clearance for the larger body.
                         if (CreatureTerrainCollision.TryClear(collisionWorld, creatures, Entity.Null,
                                 position, selectedRadius, waterSurface, out float3 checkedPosition) &&
                             SelectNaturalPrefab(request, checkedPosition) == selected)
                         {
                             prefab = selectedPrefab;
+                            prefabId = selected;
                             scale = selectedScale;
                             position = checkedPosition;
                         }
                     }
                 }
+                if (state.EntityManager.HasComponent<CreatureUniqueSpawn>(prefab) && !uniqueSpecies.Add(prefabId))
+                    continue;
                 Entity instance = commands.Instantiate(prefab);
                 WorldEntityIdentity identity = request.Identity;
                 if ((request.StateFlags & CreatureSpawnRequestFlags.ExplicitIdentity) == 0 || !identity.IsValid)
@@ -162,7 +170,8 @@ namespace WorldBuilder.Entities.Creatures.Systems
                 }
 
                 if ((request.StateFlags & CreatureSpawnRequestFlags.ExplicitTaming) != 0 &&
-                    state.EntityManager.HasComponent<CreatureTaming>(prefab))
+                    state.EntityManager.HasComponent<CreatureTaming>(prefab) &&
+                    !state.EntityManager.HasComponent<CreatureIgnoresPlayer>(prefab))
                 {
                     CreatureTaming taming = state.EntityManager.GetComponentData<CreatureTaming>(prefab);
                     taming.AttemptCount = request.TameAttempts;
@@ -208,6 +217,15 @@ namespace WorldBuilder.Entities.Creatures.Systems
             commands.Playback(state.EntityManager);
             commands.Dispose();
             prefabMap.Dispose();
+        }
+
+        private static float SpawnScale(EntityManager manager, Entity prefab, float gradeSize, out float radius)
+        {
+            var swim = manager.HasComponent<CreatureSwim>(prefab) ? manager.GetComponentData<CreatureSwim>(prefab) : default;
+            float size = swim.BaseSizeMultiplier > 0f ? swim.BaseSizeMultiplier : 1f;
+            float scale = math.max(.001f, manager.GetComponentData<LocalTransform>(prefab).Scale * size * gradeSize);
+            radius = CreatureTerrainCollision.Radius(scale, swim.BodyRadius);
+            return scale;
         }
     }
 }
